@@ -110,7 +110,7 @@ window.ReadingQueue = (() => {
    const n=el('div','rq-lane');n.append(el('strong','',label+' · '+state),el('span','',`最近开始 ${time(r.started_at)} / 完成 ${time(r.finished_at)}`));if(r.error)n.append(el('span','','错误类型：'+r.error));ls.append(n);
   }detail.append(ls);
    const offline=q.offline;
-   if(offline)detail.append(el('p','',`上轮本机补读 · 对照 ${offline.browser_caches} 处浏览器缓存核对 ${offline.checked_articles} 篇，命中 ${offline.browser_matches} 篇；群文件提取文字 ${offline.documents_read} 份，部分读取 ${offline.documents_partial} 份，其他待处理 ${offline.documents_pending} 份。`));
+    if(offline)detail.append(el('p','',`群文件读全 ${offline.documents_read} 份（含转发 ${offline.documents_forwarded_read??0} 份），部分读取 ${offline.documents_partial} 份，待处理 ${offline.documents_pending} 份。浏览器缓存上轮核对 ${offline.checked_articles} 篇，命中 ${offline.browser_matches} 篇。`));
    detail.append(el('p','',`观察期新增 ${c.arrivals_observed??0} / 首次读全 ${c.completed_observed??0}；按原口径积压 ${c.baseline_pending??0} → ${c.pending}。异地跳过不计入读全。已观察 ${c.elapsed_hours??0} 小时，${c.observed_hour_buckets??0} 个小时有实际记录。`));
   detail.append(el('p','',`初始导入 ${c.bootstrap_total??0} 篇、历史找回 ${c.recovered_total??0} 篇均单列，不算新读全。最早未读任务：${time(c.oldest_pending_at)}。`));
   for(const d of c.daily||[])detail.append(el('p','',`${d.date}：新发现 ${d.discovered} / 首次读全 ${d.completed}`));
