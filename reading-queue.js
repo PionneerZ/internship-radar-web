@@ -6,6 +6,12 @@ window.ReadingQueue = (() => {
  const topics={finance:'金融线索',product:'产品线索',roundup:'混合汇总',other:'方向待判'};
  const stages={queued:'排队等读取',verification:'实际触发验证',parse:'正文解析失败',images:'文章图片待补',complete:'已读全',location_skipped:'明确异地已跳过'};
  const pending=a=>a.stage!=='complete'&&a.stage!=='location_skipped';
+ const previewRank=a=>a.excerpt_kind==='body'?2:a.card_evidence?1:0;
+ function jobLink(evidence){
+  const finance=evidence.topic==='finance';
+  const path=window.RadarPublication?(finance?'./':'./product.html'):(finance?'/finance':'/');
+  const url=new URL(path,location.href);url.searchParams.set('job',evidence.job_id);return url.href;
+ }
  const lanes={messages:['群消息',300],body:['微信正文',60],offline:['本机缓存与群文件',300],article_images:['文章图片',300],group_images:['群图片',1800],public_sources:['已登记招聘网站',1800]};
  const states=new WeakMap();
  function setFilter(s,key,value){s[key]=value;s.page=0;render(s);save(s);}
@@ -25,7 +31,7 @@ window.ReadingQueue = (() => {
    function select(key,label,options){const box=el('label','',label),n=el('select');n.id=root.id+'-'+key;n.setAttribute('aria-label',label);for(const [v,t] of options){const o=el('option','',t);o.value=v;n.append(o);}n.onchange=()=>setFilter(s,key,n.value);box.append(n);s.controls.append(box);s[key+'Select']=n;}
    select('period','时间范围',[['week','近一周'],['all','全部积压'],['retained','移出本周仍未读']]);
    select('topic','线索方向',[['','全部方向'],...Object.entries(topics)]);
-   select('stage','处理状态',[['pending','全部未读'],['blocked','实际读取受阻'],['partial','已有正文片段'],...Object.entries(stages),['group_images','群图片缺口'],['sources','来源同步缺口']]);
+   select('stage','处理状态',[['pending','全部未读'],['card_evidence','卡片有岗位线索'],['blocked','实际读取受阻'],['partial','已有正文片段'],...Object.entries(stages),['group_images','群图片缺口'],['sources','来源同步缺口']]);
    select('account','公众号',[['','全部公众号']]);
    const box=el('label','rq-search','搜索标题或已读片段');s.input=el('input');s.input.type='search';s.input.placeholder='产品、投研、实习汇总…';s.input.value=s.query;s.input.oninput=()=>setFilter(s,'query',s.input.value);box.append(s.input);s.controls.append(box);
    const reset=el('button','','重置');reset.onclick=()=>{Object.assign(s,{period:'week',stage:'pending',topic:'',account:'',query:'',page:0});s.input.value='';render(s);save(s);};s.controls.append(reset);
@@ -58,8 +64,9 @@ window.ReadingQueue = (() => {
   renderCapacity(s.capacity,q.capacity,q,s);
    renderBatchHelp(s);
   s.digest.replaceChildren();
-  const blocked=candidates.filter(a=>['verification','parse','images'].includes(a.stage)).length;
-   const summary=[['pending',candidates.filter(pending).length,'文章未读全','排队任务也保留'],['blocked',blocked,'已尝试但受阻','验证 / 解析 / 文章图片'],['group_images',s.images.length,'群图未读全','缺原图或识别不完整'],['sources',(q.source_gaps||[]).length,'来源同步缺口','本机历史未同步']];
+  const evidence=candidates.filter(a=>pending(a)&&a.card_evidence);
+  const linked=evidence.filter(a=>a.card_evidence.job_id).length;
+  const summary=[['pending',candidates.filter(pending).length,'文章未读全','排队任务也保留'],['card_evidence',evidence.length,'卡片可先看',linked?`${linked} 篇可看已收录 JD`:'显示职责和明确条件'],['group_images',s.images.length,'群图未读全','缺原图或识别不完整'],['sources',(q.source_gaps||[]).length,'来源同步缺口','本机历史未同步']];
   for(const [key,count,label,hint] of summary){const b=el('button','rq-digest-button');b.setAttribute('aria-pressed',String(s.stage===key));b.append(el('strong','',count),el('span','',label),el('small','',hint));b.onclick=()=>{setFilter(s,'stage',key);s.digest.querySelector('[aria-pressed=true]').focus({preventScroll:true});};s.digest.append(b);}
   for(const k of ['period','stage','topic','account'])s[k+'Select'].value=s[k];
   const special=['group_images','sources'].includes(s.stage);
@@ -68,9 +75,14 @@ window.ReadingQueue = (() => {
   s.list.replaceChildren();s.pages.hidden=special;
   if(special){renderGaps(s);return;}
   const needle=s.query.trim().toLocaleLowerCase();
-   const all=candidates.filter(a=>(s.stage==='pending'?pending(a):s.stage==='blocked'?['verification','parse','images'].includes(a.stage):s.stage==='partial'?pending(a)&&a.excerpt_kind==='body':a.stage===s.stage)&&(!s.topic||a.topics.includes(s.topic))&&(!s.account||a.account===s.account)&&(!needle||(a.title+' '+a.account+' '+a.excerpt).toLocaleLowerCase().includes(needle))).sort((a,b)=>Number(b.excerpt_kind==='body')-Number(a.excerpt_kind==='body')||String(b.seen_at||'').localeCompare(a.seen_at||''));
+  const cardView=s.stage==='card_evidence';
+  const stageMatches=a=>s.stage==='pending'?pending(a):s.stage==='blocked'?['verification','parse','images'].includes(a.stage):s.stage==='partial'?pending(a)&&a.excerpt_kind==='body':a.stage===s.stage;
+  const all=(cardView?evidence:candidates.filter(stageMatches))
+   .filter(a=>(!s.topic||(cardView?a.card_evidence.topic===s.topic:a.topics.includes(s.topic)))&&(!s.account||a.account===s.account)&&(!needle||(a.title+' '+a.account+' '+a.excerpt).toLocaleLowerCase().includes(needle)))
+   .sort((a,b)=>(cardView?Number(Boolean(b.card_evidence.job_id))-Number(Boolean(a.card_evidence.job_id)):previewRank(b)-previewRank(a))||String(b.seen_at||'').localeCompare(a.seen_at||''));
   const size=12,total=Math.max(1,Math.ceil(all.length/size));s.page=Math.min(Math.max(0,s.page),total-1);
-   s.result.textContent=`${all.length} 篇符合筛选 · ${s.period==='week'?'近一周':s.period==='retained'?'历史队列':'全部保留任务'}${s.stage==='location_skipped'?' · 按地点跳过，未计为读全':' · 优先显示已取得正文片段'}`;
+  const period=s.period==='week'?'近一周':s.period==='retained'?'历史队列':'全部保留任务';
+  s.result.textContent=`${all.length} 篇符合筛选 · ${period}${cardView?' · 查看已收到的职责或条件，原文仍待补':s.stage==='location_skipped'?' · 按地点跳过，未计为读全':' · 优先显示已有内容'}`;
   if(!all.length)s.list.append(el('p','rq-empty','没有符合筛选的内容。重置筛选可查看其他未读任务。'));
   for(const a of all.slice(s.page*size,(s.page+1)*size))s.list.append(article(a,s));
   s.prev.disabled=s.page===0;s.next.disabled=s.page===total-1;s.pageLabel.textContent=`${s.page+1} / ${total} 页`;
@@ -84,10 +96,14 @@ window.ReadingQueue = (() => {
    const note=action.retry_at?retry(action.retry_at):action.blocker==='image_review'?'等待新增原图或有效复核，不重复空跑 OCR':a.stage==='complete'?'岗位状态以最新原文为准':a.stage==='location_skipped'?'已保留来源记录':'后台保留任务，等待可处理条件';
   row.append(el('p','rq-retry',note));
   for(const gap of action.image_gaps||[])row.append(el('span','rq-gap-tag',`第 ${gap.number} 张 · ${gap.reason}`));
-  const evidence=el('div','rq-evidence');evidence.append(el('span','rq-evidence-label',({body:'已读正文片段',card:'仅有原卡片介绍',title:'仅有标题，正文尚未取得'})[a.excerpt_kind]));
-  if(a.excerpt_kind!=='title')evidence.append(el('p','rq-excerpt',a.excerpt));row.append(evidence);
-  const foot=el('div','rq-item-foot');foot.append(el('span','rq-topic',a.topics.map(t=>topics[t]).join(' / ')));
-  const original=el('a','','打开原文 ↗');original.href=a.url;original.target='_blank';original.rel='noopener noreferrer';foot.append(original);row.append(foot);
+  const hint=a.card_evidence,evidence=el('div','rq-evidence');
+  const label=hint?(hint.kind==='duties'?'卡片职责片段':'标题注明的条件')+' · 原文待补':({body:'已读正文片段',card:'仅有原卡片介绍',title:'仅有标题，正文尚未取得'})[a.excerpt_kind];
+  evidence.append(el('span','rq-evidence-label',label));
+  if(hint||a.excerpt_kind!=='title')evidence.append(el('p','rq-excerpt',hint?.quote||a.excerpt));row.append(evidence);
+  const foot=el('div','rq-item-foot'),actions=el('div','rq-evidence-actions');
+  foot.append(el('span','rq-topic',hint?[hint.label,hint.cities.join(' / ')||'地点待确认'].join(' · '):a.topics.map(t=>topics[t]).join(' / ')));
+  if(hint?.job_id){const jd=el('a','rq-existing-jd','看已收录 JD');jd.href=jobLink(hint);actions.append(jd);}
+  const original=el('a','','打开原文 ↗');original.href=a.url;original.target='_blank';original.rel='noopener noreferrer';actions.append(original);foot.append(actions);row.append(foot);
   const detail=el('details','rq-task-detail');detail.open=s.opened.has(a.id);detail.ontoggle=()=>{if(detail.open)s.opened.add(a.id);else s.opened.delete(a.id);};detail.append(el('summary','','处理记录'),el('p','',`实际访问 ${a.attempt_count} 次 · 最近尝试 ${time(a.last_attempt_at)}`),el('p','',`文章首发 ${time(a.published_at)} · 来源记录 ${time(a.seen_at)}，两者不等同。`));
   if(action.optional_action)detail.append(el('p','',action.optional_action));detail.append(el('p','rq-muted','方向按标题和介绍提示，内容完整后再核对岗位。打开链接不会把任务自动标记为已读。'));row.append(detail);return row;
  }
