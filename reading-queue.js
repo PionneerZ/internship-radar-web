@@ -31,7 +31,7 @@ window.ReadingQueue = (() => {
    function select(key,label,options){const box=el('label','',label),n=el('select');n.id=root.id+'-'+key;n.setAttribute('aria-label',label);for(const [v,t] of options){const o=el('option','',t);o.value=v;n.append(o);}n.onchange=()=>setFilter(s,key,n.value);box.append(n);s.controls.append(box);s[key+'Select']=n;}
    select('period','时间范围',[['week','近一周'],['all','全部积压'],['retained','移出本周仍未读']]);
    select('topic','线索方向',[['','全部方向'],...Object.entries(topics)]);
-   select('stage','处理状态',[['pending','全部未读'],['card_evidence','卡片有岗位线索'],['blocked','实际读取受阻'],['partial','已有正文片段'],...Object.entries(stages),['group_images','群图片缺口'],['sources','来源同步缺口']]);
+    select('stage','处理状态',[['pending','全部未读'],['card_evidence','卡片有岗位线索'],['formal_review','疑似正式招聘待复核'],['blocked','实际读取受阻'],['partial','已有正文片段'],...Object.entries(stages),['group_images','群图片缺口'],['sources','来源同步缺口']]);
    select('account','公众号',[['','全部公众号']]);
    const box=el('label','rq-search','搜索标题或已读片段');s.input=el('input');s.input.type='search';s.input.placeholder='产品、投研、实习汇总…';s.input.value=s.query;s.input.oninput=()=>setFilter(s,'query',s.input.value);box.append(s.input);s.controls.append(box);
    const reset=el('button','','重置');reset.onclick=()=>{Object.assign(s,{period:'week',stage:'pending',topic:'',account:'',query:'',page:0});s.input.value='';render(s);save(s);};s.controls.append(reset);
@@ -76,13 +76,13 @@ window.ReadingQueue = (() => {
   if(special){renderGaps(s);return;}
   const needle=s.query.trim().toLocaleLowerCase();
   const cardView=s.stage==='card_evidence';
-  const stageMatches=a=>s.stage==='pending'?pending(a):s.stage==='blocked'?['verification','parse','images'].includes(a.stage):s.stage==='partial'?pending(a)&&a.excerpt_kind==='body':a.stage===s.stage;
+   const stageMatches=a=>s.stage==='pending'?pending(a):s.stage==='formal_review'?pending(a)&&a.formal_review:s.stage==='blocked'?['verification','parse','images'].includes(a.stage):s.stage==='partial'?pending(a)&&a.excerpt_kind==='body':a.stage===s.stage;
   const all=(cardView?evidence:candidates.filter(stageMatches))
    .filter(a=>(!s.topic||(cardView?a.card_evidence.topic===s.topic:a.topics.includes(s.topic)))&&(!s.account||a.account===s.account)&&(!needle||(a.title+' '+a.account+' '+a.excerpt).toLocaleLowerCase().includes(needle)))
    .sort((a,b)=>(cardView?Number(Boolean(b.card_evidence.job_id))-Number(Boolean(a.card_evidence.job_id)):previewRank(b)-previewRank(a))||String(b.seen_at||'').localeCompare(a.seen_at||''));
   const size=12,total=Math.max(1,Math.ceil(all.length/size));s.page=Math.min(Math.max(0,s.page),total-1);
   const period=s.period==='week'?'近一周':s.period==='retained'?'历史队列':'全部保留任务';
-  s.result.textContent=`${all.length} 篇符合筛选 · ${period}${cardView?' · 查看已收到的职责或条件，原文仍待补':s.stage==='location_skipped'?' · 按地点跳过，未计为读全':' · 优先显示已有内容'}`;
+   s.result.textContent=`${all.length} 篇符合筛选 · ${period}${cardView?' · 查看已收到的职责或条件，原文仍待补':s.stage==='formal_review'?' · 卡片偏正式招聘，后台留名额复核，仍计未读':s.stage==='location_skipped'?' · 按地点跳过，未计为读全':' · 优先显示已有内容'}`;
   if(!all.length)s.list.append(el('p','rq-empty','没有符合筛选的内容。重置筛选可查看其他未读任务。'));
   for(const a of all.slice(s.page*size,(s.page+1)*size))s.list.append(article(a,s));
   s.prev.disabled=s.page===0;s.next.disabled=s.page===total-1;s.pageLabel.textContent=`${s.page+1} / ${total} 页`;
@@ -121,8 +121,7 @@ window.ReadingQueue = (() => {
    const box=el('div','rq-schedule rq-independent');
    box.append(el('strong','',`网站独立补读 · 今日新读 ${f.today_new_details_read} 个详情`),
     el('p','',`金融 ${f.today_new_finance_details} / 产品 ${f.today_new_product_details} · 本轮新读 ${f.new_details_read} · 待读 ${f.pending} · 失败 ${f.failed} · ${time(f.finished_at)}`));
-   const indexState={scanning:'后台继续补扫',boundary:'已到七天日期边界',end:'已到列表末页',failed:'访问失败，等待自动重试',limited:'达到分页上限',unverified:'分页待核验'}[f.index_state];
-   if(indexState)box.append(el('p','rq-index-progress',`招聘列表已扫 ${f.index_pages_checked} 页${f.index_oldest_date?` · 最早列表日期 ${f.index_oldest_date}`:''} · ${indexState}`));
+   if(f.index_state==='members_only')box.append(el('p','rq-index-progress',`招聘列表公开首屏${f.index_oldest_date?` · 最早列表日期 ${f.index_oldest_date}`:''} · 后续分页需会员，后台继续核对公开详情`));
    box.append(el('p','rq-muted',`只展开已登记网站的真实岗位链接；跳过明确异地 ${f.skipped_city}、其他岗位 ${f.skipped_other_role} 个链接。${f.bounded_remaining?`另有 ${f.bounded_remaining} 个链接到达采集边界，尚未展开。`:''}网站详情数不是新增岗位数，也不抵扣微信未读。`));
    root.append(box);
   }
