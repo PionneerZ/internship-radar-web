@@ -6,7 +6,7 @@ window.ReadingQueue = (() => {
  const topics={finance:'金融线索',product:'产品线索',roundup:'混合汇总',other:'方向待判'};
  const stages={queued:'排队等读取',verification:'实际触发验证',parse:'正文解析失败',images:'文章图片待补',complete:'已读全',location_skipped:'明确异地已跳过'};
  const pending=a=>a.stage!=='complete'&&a.stage!=='location_skipped';
- const lanes={messages:['群消息',300],body:['微信正文',60],offline:['本机缓存与群文件',300],article_images:['文章图片',300],group_images:['群图片',1800],public_sources:['金融公开来源',1800]};
+ const lanes={messages:['群消息',300],body:['微信正文',60],offline:['本机缓存与群文件',300],article_images:['文章图片',300],group_images:['群图片',1800],public_sources:['已登记招聘网站',1800]};
  const states=new WeakMap();
  function setFilter(s,key,value){s[key]=value;s.page=0;render(s);save(s);}
  function save(s){const u=new URL(location.href);for(const k of ['period','stage','topic','account','query']){const v=s[k];if(v&&v!==({period:'week',stage:'pending'})[k])u.searchParams.set('rq_'+k,v);else u.searchParams.delete('rq_'+k);}history.replaceState(null,'',u);}
@@ -100,6 +100,7 @@ window.ReadingQueue = (() => {
  function renderCapacity(root,c,q,s){
   root.replaceChildren();if(!c||c.pending==null){root.append(el('p','rq-muted','自动处理记录暂不可用，无法判断是否追上更新。'));return;}
   const head=el('div','rq-capacity-head');head.append(el('strong','rq-capacity-state',({passed:'已追上 · 72 小时实测通过',behind:'积压仍在增加',observing:'补读中 · 仍在观察'})[c.assessment]||'仍在观察'),el('span','rq-muted',`今天新发现 ${c.today_discovered??0} / 首次读全 ${c.today_completed??0}`));root.append(head);
+  const f=q.public_frontier;if(f){const box=el('div','rq-schedule rq-independent');box.append(el('strong','',`网站独立补读 · 今日新读 ${f.today_new_details_read} 个详情`),el('p','',`金融 ${f.today_new_finance_details} / 产品 ${f.today_new_product_details} · 本轮新读 ${f.new_details_read} · 待读 ${f.pending} · 失败 ${f.failed} · ${time(f.finished_at)}`),el('p','rq-muted',`只展开已登记网站的真实岗位链接；跳过明确异地 ${f.skipped_city}、其他岗位 ${f.skipped_other_role} 个链接。${f.bounded_remaining?`另有 ${f.bounded_remaining} 个链接到达采集边界，尚未展开。`:''}网站详情数不是新增岗位数，也不抵扣微信未读。`));root.append(box);}
   const failed=Object.entries(q.dispatch?.errors||{});if(failed.length)root.append(el('p','rq-schedule','后台启动失败：'+failed.map(([k,v])=>(lanes[k]?.[0]||k)+'（'+v+'）').join('、')+'。独立恢复将继续重试，其他通道不受阻。'));
    const nums=el('div','rq-capacity-grid');for(const [n,t] of [[q.remaining,'本周未读'],[(q.retained_items||[]).filter(pending).length,'历史待补'],[q.all_pending,'全部待补'],[c.complete,'累计已读全']]){const b=el('div');b.append(el('strong','',n??'—'),el('span','',t));nums.append(b);}root.append(nums);
   const detail=el('details','rq-capacity-detail');detail.open=s.opened.has('capacity');detail.ontoggle=()=>{if(detail.open)s.opened.add('capacity');else s.opened.delete('capacity');};detail.append(el('summary','','查看自动任务、失败与实际处理进度'));
