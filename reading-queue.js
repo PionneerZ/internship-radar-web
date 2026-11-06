@@ -91,7 +91,7 @@ window.ReadingQueue = (() => {
   const entries=[
    ['正文待补',bodies.length+' 篇',q.cooldown_until?`共同等待验证冷却至 ${time(q.cooldown_until)}，到期仅正常试读 1 篇；成功后接续读取。`:'按来源和金融 / 产品方向轮换补读，保留历史和未知标题名额。','无需逐篇打开或反复刷新；缓存与图片通道仍独立工作。','pending'],
    ['文章图片待补',images.length+' 篇','已读正文片段仍可查看；后台继续寻找和识别完整图片。空 OCR 不会被当作完成。','只有缺失的新原图或可靠复核能补齐的部分会继续明确保留。','images'],
-   ['群图片缺原图',s.images.length+' 张 / '+groups.size+' 个来源',[...groups].map(([name,count])=>name+' '+count+' 张').join('；')||'当前没有群图片缺口。','后台每 30 分钟重查原图。若你以后同步到原图，后续会自动识别；现在无需逐条处理。','group_images'],
+   ['群图未读全',s.images.length+' 张 / '+groups.size+' 个来源',[...groups].map(([name,count])=>name+' '+count+' 张').join('；')||'当前没有群图片缺口。','后台每 30 分钟重查原图，也会从已保存的招聘文章查找清晰同版。','group_images'],
    ['来源历史待同步',(q.source_gaps||[]).length+' 个来源','本机未同步到的历史无法靠重复刷新补出；后台每 5 分钟复查已有授权来源。','具体来源和缺口集中列在下方。用途未知的来源仅记录数量，不擅自读取。','sources']
   ];
   for(const [title,count,reason,next,stage] of entries){const card=el('section','rq-batch-card');card.append(el('strong','',title+' · '+count),el('p','',reason),el('p','rq-muted',next));const button=el('button','','查看这类内容');button.onclick=()=>{Object.assign(s,{period:'all',stage,topic:'',account:'',query:'',page:0});s.input.value='';render(s);save(s);s.result.scrollIntoView({block:'center'});};card.append(button);s.batchHelp.append(card);}
@@ -105,7 +105,8 @@ window.ReadingQueue = (() => {
   s.digest.replaceChildren();
   const evidence=candidates.filter(a=>pending(a)&&a.card_evidence);
   const linked=evidence.filter(a=>a.card_evidence.job_id).length;
-  const summary=[['pending',candidates.filter(pending).length,'文章未读全','排队任务也保留'],['card_evidence',evidence.length,'卡片可先看',linked?`${linked} 篇可看已收录 JD`:'显示职责和明确条件'],['group_images',s.images.length,'群图未读全','缺原图或识别不完整'],['sources',(q.source_gaps||[]).length,'来源同步缺口','本机历史未同步']];
+  const checkedImages=s.images.filter(a=>a.verified_copy).length;
+  const summary=[['pending',candidates.filter(pending).length,'文章未读全','排队任务也保留'],['card_evidence',evidence.length,'卡片可先看',linked?`${linked} 篇可看已收录 JD`:'显示职责和明确条件'],['group_images',s.images.length,'群图未读全',checkedImages?`${checkedImages} 张已有同版结论`:'缺原图或识别不完整'],['sources',(q.source_gaps||[]).length,'来源同步缺口','本机历史未同步']];
   for(const [key,count,label,hint] of summary){const b=el('button','rq-digest-button');b.setAttribute('aria-pressed',String(s.stage===key));b.append(el('strong','',count),el('span','',label),el('small','',hint));b.onclick=()=>{setFilter(s,'stage',key);s.digest.querySelector('[aria-pressed=true]').focus({preventScroll:true});};s.digest.append(b);}
   for(const k of ['period','stage','topic','account'])s[k+'Select'].value=s[k];
   const special=['group_images','sources'].includes(s.stage);
@@ -153,8 +154,16 @@ window.ReadingQueue = (() => {
  }
  function renderGaps(s){
   const q=s.queue,group=s.stage==='group_images',rows=group?s.images:q.source_gaps||[];
-  s.result.textContent=group?`${rows.length} 张群图未读全 · 按本机可定位的招聘群和消息时间列出`:`${rows.length} 个已授权来源有同步缺口 · 另有 ${q.unconfirmed_sources||0} 个来源用途待核查，未自动授权`;
-  for(const a of rows){const row=el('article','rq-item rq-gap-item');row.append(el('span','rq-badge',group?'群图未读全':'本机历史未齐'),el('h3','',a.source+(group?' · '+time(a.time):'')),el('p','rq-next-action',a.reason),el('p','rq-muted',a.next_step||a.next_action));if(a.optional_action)row.append(el('p','rq-muted',a.optional_action));s.list.append(row);}
+  const checked=group?rows.filter(a=>a.verified_copy):[];
+  s.result.textContent=group?`${rows.length} 张群图未读全${checked.length?` · ${checked.length} 张已有同版结论`:''}`:`${rows.length} 个已授权来源有同步缺口 · 另有 ${q.unconfirmed_sources||0} 个来源用途待核查，未自动授权`;
+  for(const a of [...checked,...rows.filter(a=>!a.verified_copy)]){
+   const row=el('article','rq-item rq-gap-item'),copy=a.verified_copy;
+   row.append(el('span','rq-badge',copy?'同版海报已核对 · 原图待补':group?'群图未读全':'本机历史未齐'),
+    el('h3','',a.source+(group?' · '+time(a.time):'')),el('p','rq-next-action',copy?.summary||a.reason),el('p','rq-muted',a.next_step||a.next_action));
+   if(copy){const foot=el('div','rq-item-foot');foot.append(originalLink(copy,'查看公众号原文'));row.append(foot);}
+   else if(a.optional_action)row.append(el('p','rq-muted',a.optional_action));
+   s.list.append(row);
+  }
   if(!rows.length)s.list.append(el('p','rq-empty',group?'当前没有已记录的群图缺口。':'当前没有已授权来源的同步缺口；用途待确认的来源不会擅自采集。'));
  }
  function renderCapacity(root,c,q,s){
