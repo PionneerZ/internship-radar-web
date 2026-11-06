@@ -142,7 +142,7 @@ window.ReadingQueue = (() => {
   row.append(el('p','rq-retry',note));
   for(const gap of action.image_gaps||[])row.append(el('span','rq-gap-tag',`第 ${gap.number} 张 · ${gap.reason}`));
   const hint=a.card_evidence,evidence=el('div','rq-evidence');
-  const label=hint?(hint.kind==='duties'?'卡片职责片段':'标题注明的条件')+' · 原文待补':({body:'已读正文片段',card:'仅有原卡片介绍',title:'仅有标题，正文尚未取得'})[a.excerpt_kind];
+   const label=hint?({duties:'卡片职责片段',requirement:'标题注明的条件',operations:'卡片职责 · 运营支持线索'})[hint.kind]+' · 原文待补':({body:'已读正文片段',card:'仅有原卡片介绍',title:'仅有标题，正文尚未取得'})[a.excerpt_kind];
   evidence.append(el('span','rq-evidence-label',label));
   if(hint||a.excerpt_kind!=='title')evidence.append(el('p','rq-excerpt',hint?.quote||a.excerpt));row.append(evidence);
   const foot=el('div','rq-item-foot'),actions=el('div','rq-evidence-actions');
