@@ -121,8 +121,9 @@ window.ReadingQueue = (() => {
    const box=el('div','rq-schedule rq-independent');
    box.append(el('strong','',`网站独立补读 · 今日新读 ${f.today_new_details_read} 个详情`),
     el('p','',`金融 ${f.today_new_finance_details} / 产品 ${f.today_new_product_details} · 本轮新读 ${f.new_details_read} · 待读 ${f.pending} · 失败 ${f.failed} · ${time(f.finished_at)}`));
-   if(f.index_state==='members_only')box.append(el('p','rq-index-progress',`招聘列表公开首屏${f.index_oldest_date?` · 最早列表日期 ${f.index_oldest_date}`:''} · 后续分页需会员，后台继续核对公开详情`));
-   box.append(el('p','rq-muted',`只展开已登记网站的真实岗位链接；跳过明确异地 ${f.skipped_city}、其他岗位 ${f.skipped_other_role} 个链接。${f.bounded_remaining?`另有 ${f.bounded_remaining} 个链接到达采集边界，尚未展开。`:''}网站详情数不是新增岗位数，也不抵扣微信未读。`));
+   const coverage=el('p','rq-muted');
+   if(f.index_state==='members_only')coverage.append(el('span','rq-index-progress',`招聘列表${f.index_oldest_date?`公开首屏最早 ${f.index_oldest_date}`:'首屏日期待核验'} · 后续分页需会员。`));
+   coverage.append('网站详情不抵扣微信未读。');box.append(coverage);
    root.append(box);
   }
   const failed=Object.entries(q.dispatch?.errors||{});if(failed.length)root.append(el('p','rq-schedule','后台启动失败：'+failed.map(([k,v])=>(lanes[k]?.[0]||k)+'（'+v+'）').join('、')+'。独立恢复将继续重试，其他通道不受阻。'));
@@ -133,6 +134,7 @@ window.ReadingQueue = (() => {
    const state=r.state==='failed'?'失败，待自动重试':r.state==='interrupted'?'中断，待自动恢复':r.state==='running'?'正在处理':stale?'记录过旧，请检查后台':'最近执行完成';
    const n=el('div','rq-lane');n.append(el('strong','',label+' · '+state),el('span','',`最近开始 ${time(r.started_at)} / 完成 ${time(r.finished_at)}`));if(r.error)n.append(el('span','','错误类型：'+r.error));ls.append(n);
   }detail.append(ls);
+   if(f)detail.append(el('p','',`登记网站跳过明确异地 ${f.skipped_city}、其他岗位 ${f.skipped_other_role} 个链接。${f.bounded_remaining?`还有 ${f.bounded_remaining} 个链接到达采集边界，尚未展开。`:''}同岗位多来源合并，网站详情数与岗位数分开统计。`));
    const offline=q.offline;
     if(offline)detail.append(el('p','',`群文件读全 ${offline.documents_read} 份（含转发 ${offline.documents_forwarded_read??0} 份），部分读取 ${offline.documents_partial} 份，待处理 ${offline.documents_pending} 份。浏览器缓存上轮核对 ${offline.checked_articles} 篇，命中 ${offline.browser_matches} 篇。`));
    detail.append(el('p','',`观察期新增 ${c.arrivals_observed??0} / 首次读全 ${c.completed_observed??0}；按原口径积压 ${c.baseline_pending??0} → ${c.pending}。异地跳过不计入读全。已观察 ${c.elapsed_hours??0} 小时，${c.observed_hour_buckets??0} 个小时有实际记录。`));
