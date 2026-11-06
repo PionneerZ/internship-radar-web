@@ -7,6 +7,22 @@ window.ReadingQueue = (() => {
  const stages={queued:'排队等读取',verification:'实际触发验证',parse:'正文解析失败',images:'文章图片待补',complete:'已读全',location_skipped:'明确异地已跳过'};
  const pending=a=>a.stage!=='complete'&&a.stage!=='location_skipped';
  const previewRank=a=>a.excerpt_kind==='body'?2:a.card_evidence?1:0;
+ function previewKey(a){
+  if(!pending(a)||a.excerpt_kind!=='card'||a.title.length>=280||a.excerpt.length>=850)return '';
+  const title=a.title.replace(/\s+/g,' ').trim(),excerpt=a.excerpt.replace(/\s+/g,' ').trim();
+  return title&&excerpt.length>=20?JSON.stringify([title,excerpt]):'';
+ }
+ function groupPreviews(articles){
+  const groups=[],previews=new Map();
+  for(const a of articles){
+   const key=previewKey(a);
+   if(previews.has(key)){previews.get(key).others.push(a);continue;}
+   const group={first:a,key,others:[]};
+   groups.push(group);
+   if(key)previews.set(key,group);
+  }
+  return groups;
+ }
  function jobLink(evidence){
   const finance=evidence.topic==='finance';
   const path=window.RadarPublication?(finance?'./':'./product.html'):(finance?'/finance':'/');
@@ -44,6 +60,29 @@ window.ReadingQueue = (() => {
   render(s);
  }
  function retry(value){return value?(Date.parse(value)>Date.now()?'可重试时间 '+time(value):'已到可重试时间，等待队列安排'):'尚无确定重试时间';}
+ function originalLink(a,label){
+  const link=el('a','',label);link.href=a.url;link.target='_blank';link.rel='noopener noreferrer';return link;
+ }
+ function samePreview(group,s){
+  const detail=el('details','rq-same-preview'),key='preview:'+group.key;
+  detail.open=s.opened.has(key);
+  detail.ontoggle=()=>{if(detail.open)s.opened.add(key);else s.opened.delete(key);};
+  detail.append(el('summary','',`同标题和简介 · 还有 ${group.others.length} 篇`));
+  const list=el('ul');
+  for(const a of group.others){
+   const row=el('li'),action=a.action||{};
+   const top=el('div','rq-item-top');
+   top.append(el('span','rq-badge',action.label||a.stage_label),el('span','rq-muted',a.account+' · '+time(a.seen_at)));
+   const clock=el('p','rq-muted',`实际访问 ${a.attempt_count} 次 · ${retry(action.retry_at||a.next_retry_at)}`);
+   const links=el('div','rq-evidence-actions');
+   if(a.card_evidence?.job_id){
+    const jd=el('a','rq-existing-jd','看已收录 JD');jd.href=jobLink(a.card_evidence);links.append(jd);
+   }
+   links.append(originalLink(a,'打开这篇原文 ↗'));
+   row.append(top,clock,links);list.append(row);
+  }
+  detail.append(list);return detail;
+ }
  function renderBatchHelp(s){
   const q=s.queue,all=[...(q.items||[]),...(q.retained_items||[])].filter(pending),images=all.filter(a=>a.stage==='images'),bodies=all.filter(a=>a.stage!=='images');
   s.scheduleTitle.textContent=`${all.length} 篇未读由后台接续处理 · 展开查看共同原因和省力办法`;
@@ -80,18 +119,23 @@ window.ReadingQueue = (() => {
   const all=(cardView?evidence:candidates.filter(stageMatches))
    .filter(a=>(!s.topic||(cardView?a.card_evidence.topic===s.topic:a.topics.includes(s.topic)))&&(!s.account||a.account===s.account)&&(!needle||(a.title+' '+a.account+' '+a.excerpt).toLocaleLowerCase().includes(needle)))
    .sort((a,b)=>(cardView?Number(Boolean(b.card_evidence.job_id))-Number(Boolean(a.card_evidence.job_id)):previewRank(b)-previewRank(a))||String(b.seen_at||'').localeCompare(a.seen_at||''));
-  const size=12,total=Math.max(1,Math.ceil(all.length/size));s.page=Math.min(Math.max(0,s.page),total-1);
+  const groups=groupPreviews(all),folded=all.length-groups.length;
+  const size=12,total=Math.max(1,Math.ceil(groups.length/size));s.page=Math.min(Math.max(0,s.page),total-1);
   const period=s.period==='week'?'近一周':s.period==='retained'?'历史队列':'全部保留任务';
-   s.result.textContent=`${all.length} 篇符合筛选 · ${period}${cardView?' · 查看已收到的职责或条件，原文仍待补':s.stage==='formal_review'?' · 卡片偏正式招聘，后台留名额复核，仍计未读':s.stage==='location_skipped'?' · 按地点跳过，未计为读全':' · 优先显示已有内容'}`;
+   s.result.textContent=`${all.length} 篇符合筛选 · ${period}${cardView?' · 查看已收到的职责或条件，原文仍待补':s.stage==='formal_review'?' · 卡片偏正式招聘，后台留名额复核，仍计未读':s.stage==='location_skipped'?' · 按地点跳过，未计为读全':' · 优先显示已有内容'}${folded?` · 已折叠 ${folded} 篇相同预览`:''}`;
   if(!all.length)s.list.append(el('p','rq-empty','没有符合筛选的内容。重置筛选可查看其他未读任务。'));
-  for(const a of all.slice(s.page*size,(s.page+1)*size))s.list.append(article(a,s));
+  for(const group of groups.slice(s.page*size,(s.page+1)*size)){
+   const row=article(group.first,s);
+   if(group.others.length)row.append(samePreview(group,s));
+   s.list.append(row);
+  }
   s.prev.disabled=s.page===0;s.next.disabled=s.page===total-1;s.pageLabel.textContent=`${s.page+1} / ${total} 页`;
  }
  function article(a,s){
   const row=el('article','rq-item');row.dataset.article=a.id;
   const action=a.action||{label:a.stage_label,next_action:a.reason,retry_at:a.next_retry_at};
   const top=el('div','rq-item-top');top.append(el('span','rq-badge',action.label),el('span','rq-muted',a.account+' · '+time(a.seen_at)));row.append(top);
-  const h=el('h3'),link=el('a','',a.title||'标题尚未取得');link.href=a.url;link.target='_blank';link.rel='noopener noreferrer';h.append(link);row.append(h);
+  const h=el('h3');h.append(originalLink(a,a.title||'标题尚未取得'));row.append(h);
   row.append(el('p','rq-next-action',action.next_action));
    const note=action.retry_at?retry(action.retry_at):action.blocker==='image_review'?'等待新增原图或有效复核，不重复空跑 OCR':a.stage==='complete'?'岗位状态以最新原文为准':a.stage==='location_skipped'?'已保留来源记录':'后台保留任务，等待可处理条件';
   row.append(el('p','rq-retry',note));
@@ -103,7 +147,7 @@ window.ReadingQueue = (() => {
   const foot=el('div','rq-item-foot'),actions=el('div','rq-evidence-actions');
   foot.append(el('span','rq-topic',hint?[hint.label,hint.cities.join(' / ')||'地点待确认'].join(' · '):a.topics.map(t=>topics[t]).join(' / ')));
   if(hint?.job_id){const jd=el('a','rq-existing-jd','看已收录 JD');jd.href=jobLink(hint);actions.append(jd);}
-  const original=el('a','','打开原文 ↗');original.href=a.url;original.target='_blank';original.rel='noopener noreferrer';actions.append(original);foot.append(actions);row.append(foot);
+  actions.append(originalLink(a,'打开原文 ↗'));foot.append(actions);row.append(foot);
   const detail=el('details','rq-task-detail');detail.open=s.opened.has(a.id);detail.ontoggle=()=>{if(detail.open)s.opened.add(a.id);else s.opened.delete(a.id);};detail.append(el('summary','','处理记录'),el('p','',`实际访问 ${a.attempt_count} 次 · 最近尝试 ${time(a.last_attempt_at)}`),el('p','',`文章首发 ${time(a.published_at)} · 来源记录 ${time(a.seen_at)}，两者不等同。`));
   if(action.optional_action)detail.append(el('p','',action.optional_action));detail.append(el('p','rq-muted','方向按标题和介绍提示，内容完整后再核对岗位。打开链接不会把任务自动标记为已读。'));row.append(detail);return row;
  }
