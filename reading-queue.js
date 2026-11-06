@@ -112,7 +112,10 @@ window.ReadingQueue = (() => {
    top.append(el('span','rq-badge',action.label||a.stage_label),el('span','rq-muted',a.account+' · '+time(a.seen_at)));
    const clock=el('p','rq-muted',`实际访问 ${a.attempt_count} 次 · ${retry(action.retry_at||a.next_retry_at)}`);
    const links=el('div','rq-evidence-actions');
-   if(a.card_evidence?.job_id){
+   for(const match of a.official_matches||[]){
+    const jd=el('a','rq-existing-jd','官方 JD 已核实 · 转载未读全');jd.href=jobLink(match);links.append(jd);
+   }
+   if(a.card_evidence?.job_id&&!a.official_matches?.some(m=>m.job_id===a.card_evidence.job_id)){
     const jd=el('a','rq-existing-jd','看已收录 JD');jd.href=jobLink(a.card_evidence);links.append(jd);
    }
    links.append(originalLink(a,'打开这篇原文 ↗'));
@@ -207,12 +210,15 @@ window.ReadingQueue = (() => {
  }
  function renderCapacity(root,c,q,s){
   root.replaceChildren();if(!c||c.pending==null){root.append(el('p','rq-muted','自动处理记录暂不可用，无法判断是否追上更新。'));return;}
-  const head=el('div','rq-capacity-head');head.append(el('strong','rq-capacity-state',({passed:'已追上 · 72 小时实测通过',behind:'积压仍在增加',observing:'补读中 · 仍在观察'})[c.assessment]||'仍在观察'),el('span','rq-muted',`今天新发现 ${c.today_discovered??0} / 首次读全 ${c.today_completed??0}`));root.append(head);
+  const w72=c.independent_window;
+  const status=w72?(w72.assessment==='passed'&&q.independent?.state!=='pilot'?'passed':w72.assessment==='behind'?'behind':'observing'):c.assessment;
+  const head=el('div','rq-capacity-head');head.append(el('strong','rq-capacity-state',({passed:'已追上 · 72 小时实测通过',behind:'实测产能尚未追上',observing:'补读中 · 仍在观察'})[status]||'仍在观察'),el('span','rq-muted',`今天新发现 ${c.today_discovered??0} / 首次读全 ${c.today_completed??0}`));root.append(head);
   if(q.independent?.state){
    const w=q.independent,box=el('div','rq-schedule rq-independent');
    box.append(el('strong','',`微信读书 · ${w.state==='enabled'?'自动运行':'真实样本验证'}`),
     el('p','',`样本已判定 ${w.sample_evaluated??0} / ${w.sample_total??0} · 新取得正文 ${w.new_body??0} · 首次读全 ${w.full??0}`),
     el('p','rq-muted',w.history_state==='unavailable'?'历史列表读取失败，旧文继续保留在未读队列。':w.history_state==='verified'?'历史列表已有实际可读记录。':'历史补读能力待核验。'));
+   if(w72)box.append(el('p','rq-muted',`新通道观察 ${w72.hours} 小时 · ${w72.hour_buckets} 个真实样本小时 · 新增 ${w72.arrivals} / 首次读全 ${w72.completed} · 清积压工程目标 ${w72.engineering_target} 篇/天`));
    root.append(box);
   }
   const f=q.public_frontier;
