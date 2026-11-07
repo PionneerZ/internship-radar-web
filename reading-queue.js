@@ -45,12 +45,12 @@ window.ReadingQueue = (() => {
  function decisions(root,queue,jobs,images,onAction){
   if(!root)return;
   const missing=(images||[]).filter(x=>!x.verified_copy).length;
-  const gaps=missing+(queue?.source_gaps?.length||0)+(queue?.local_login?1:0);
+  const gaps=missing+(queue?.source_gaps?.length||0);
   const entries=[
    ['today','今日值得看',jobs.filter(decisionToday).length,'新发现、临近截止或 JD 有变化'],
    ['ready','可直接判断',jobs.filter(decisionReady).length,'可看 JD 和投递方式，仍需核对条件'],
-   ['pending','自动补读中',queue?.all_pending??'—','正文、图片与保留的历史任务'],
-   ['gaps','需要你处理',queue?gaps:'—',queue?.local_login?'一次登录恢复微信读书':'可查看原图和同步缺口，无需逐篇查'],
+   ['pending','待补读',queue?.all_pending??'—','先看标题方向；含排队与暂不可读'],
+   ['gaps',queue?.local_login?'需要你处理':'共同缺口',queue?.local_login?1:queue?gaps:'—',queue?.local_login?'一次登录恢复微信读书':'原图和同步缺口，无需逐篇查'],
   ];
   const active=document.activeElement?.dataset.decision;
   root.replaceChildren();
@@ -84,7 +84,7 @@ window.ReadingQueue = (() => {
    function select(key,label,options){const box=el('label','',label),n=el('select');n.id=root.id+'-'+key;n.setAttribute('aria-label',label);for(const [v,t] of options){const o=el('option','',t);o.value=v;n.append(o);}n.onchange=()=>setFilter(s,key,n.value);box.append(n);s.controls.append(box);s[key+'Select']=n;}
    select('period','时间范围',[['week','近一周'],['all','全部积压'],['retained','移出本周仍未读']]);
    select('topic','线索方向',[['','全部方向'],...Object.entries(topics)]);
-    select('stage','处理状态',[['pending','全部未读'],['official','官方 JD 已核实'],['card_evidence','卡片有岗位线索'],['formal_review','疑似正式招聘待复核'],['blocked','实际读取受阻'],['partial','已有正文片段'],...Object.entries(stages),['group_images','群图片缺口'],['sources','来源同步缺口']]);
+    select('stage','处理状态',[['pending','全部未读'],['direction','方向明确 · 先看线索'],['official','官方 JD 已核实'],['card_evidence','卡片有职责或条件'],['deferred','低优先 · 保留复核'],['formal_review','疑似正式招聘待复核'],['blocked','实际读取受阻'],['partial','已有正文片段'],...Object.entries(stages),['group_images','群图片缺口'],['sources','来源同步缺口']]);
    select('account','公众号',[['','全部公众号']]);
    const box=el('label','rq-search','搜索标题或已读片段');s.input=el('input');s.input.type='search';s.input.placeholder='产品、投研、实习汇总…';s.input.value=s.query;s.input.oninput=()=>setFilter(s,'query',s.input.value);box.append(s.input);s.controls.append(box);
    const reset=el('button','','重置');reset.onclick=()=>{Object.assign(s,{period:'week',stage:'pending',topic:'',account:'',query:'',page:0});s.input.value='';render(s);save(s);};s.controls.append(reset);
@@ -144,9 +144,9 @@ window.ReadingQueue = (() => {
    renderBatchHelp(s);
   s.digest.replaceChildren();
   const evidence=candidates.filter(a=>pending(a)&&a.card_evidence);
-  const linked=evidence.filter(a=>a.card_evidence.job_id).length;
+  const quick=candidates.filter(a=>pending(a)&&['finance','product'].includes(a.title_hint));
   const checkedImages=s.images.filter(a=>a.verified_copy).length;
-  const summary=[['pending',candidates.filter(pending).length,'文章未读全','排队任务也保留'],['card_evidence',evidence.length,'卡片可先看',linked?`${linked} 篇可看已收录 JD`:'显示职责和明确条件'],['group_images',s.images.length,'群图未读全',checkedImages?`${checkedImages} 张已有同版结论`:'缺原图或识别不完整'],['sources',(q.source_gaps||[]).length,'来源同步缺口','本机历史未同步']];
+  const summary=[['pending',candidates.filter(pending).length,'文章未读全','排队任务也保留'],['direction',quick.length,'方向明确 · 先看线索',`金融 ${quick.filter(a=>a.title_hint==='finance').length} · 产品 ${quick.filter(a=>a.title_hint==='product').length}`],['group_images',s.images.length,'群图未读全',checkedImages?`${checkedImages} 张已有同版结论`:'缺原图或识别不完整'],['sources',(q.source_gaps||[]).length,'来源同步缺口','本机历史未同步']];
   for(const [key,count,label,hint] of summary){const b=el('button','rq-digest-button');b.setAttribute('aria-pressed',String(s.stage===key));b.append(el('strong','',count),el('span','',label),el('small','',hint));b.onclick=()=>{setFilter(s,'stage',key);s.digest.querySelector('[aria-pressed=true]').focus({preventScroll:true});};s.digest.append(b);}
   for(const k of ['period','stage','topic','account'])s[k+'Select'].value=s[k];
   const special=['group_images','sources'].includes(s.stage);
@@ -156,14 +156,14 @@ window.ReadingQueue = (() => {
   if(special){renderGaps(s);return;}
   const needle=s.query.trim().toLocaleLowerCase();
   const cardView=s.stage==='card_evidence';
-   const stageMatches=a=>s.stage==='pending'?pending(a):s.stage==='official'?pending(a)&&a.official_matches?.length:s.stage==='formal_review'?pending(a)&&a.formal_review:s.stage==='blocked'?['verification','parse','images'].includes(a.stage):s.stage==='partial'?pending(a)&&a.excerpt_kind==='body':a.stage===s.stage;
+   const stageMatches=a=>s.stage==='pending'?pending(a):s.stage==='direction'?pending(a)&&['finance','product'].includes(a.title_hint):s.stage==='deferred'?pending(a)&&a.title_hint==='deferred':s.stage==='official'?pending(a)&&a.official_matches?.length:s.stage==='formal_review'?pending(a)&&a.formal_review:s.stage==='blocked'?['verification','parse','images'].includes(a.stage):s.stage==='partial'?pending(a)&&a.excerpt_kind==='body':a.stage===s.stage;
   const all=(cardView?evidence:candidates.filter(stageMatches))
    .filter(a=>(!s.topic||(cardView?a.card_evidence.topic===s.topic:a.topics.includes(s.topic)))&&(!s.account||a.account===s.account)&&(!needle||(a.title+' '+a.account+' '+a.excerpt).toLocaleLowerCase().includes(needle)))
    .sort((a,b)=>(cardView?Number(Boolean(b.card_evidence.job_id))-Number(Boolean(a.card_evidence.job_id)):previewRank(b)-previewRank(a))||String(b.seen_at||'').localeCompare(a.seen_at||''));
   const groups=groupPreviews(all),folded=all.length-groups.length;
   const size=12,total=Math.max(1,Math.ceil(groups.length/size));s.page=Math.min(Math.max(0,s.page),total-1);
   const period=s.period==='week'?'近一周':s.period==='retained'?'历史队列':'全部保留任务';
-   s.result.textContent=`${all.length} 篇符合筛选 · ${period}${cardView?' · 查看已收到的职责或条件，原文仍待补':s.stage==='formal_review'?' · 卡片偏正式招聘，后台留名额复核，仍计未读':s.stage==='location_skipped'?' · 按地点跳过，未计为读全':' · 优先显示已有内容'}${folded?` · 已折叠 ${folded} 篇相同预览`:''}`;
+   s.result.textContent=`${all.length} 篇符合筛选 · ${period}${s.stage==='direction'?' · 按标题或简介先看方向，岗位和投递条件仍需核实':s.stage==='deferred'?' · 标题像攻略、招聘进度或相邻方向，原文保留复核':cardView?' · 查看已收到的职责或条件，原文仍待补':s.stage==='formal_review'?' · 卡片偏正式招聘，后台留名额复核，仍计未读':s.stage==='location_skipped'?' · 按地点跳过，未计为读全':' · 优先显示已有内容'}${folded?` · 已折叠 ${folded} 篇相同预览`:''}`;
   if(!all.length)s.list.append(el('p','rq-empty','没有符合筛选的内容。重置筛选可查看其他未读任务。'));
   for(const group of groups.slice(s.page*size,(s.page+1)*size)){
    const row=article(group.first,s);
@@ -225,6 +225,9 @@ window.ReadingQueue = (() => {
    box.append(el('strong','',`微信读书 · ${w.state==='enabled'?'自动运行':'真实样本验证'}`),
     el('p','',`样本已判定 ${w.sample_evaluated??0} / ${w.sample_total??0} · 新取得正文 ${w.new_body??0} · 首次读全 ${w.full??0}`),
     el('p','rq-muted',w.history_state==='unavailable'?'历史列表读取失败，旧文继续保留在未读队列。':w.history_state==='verified'?'历史列表已有实际可读记录。':'历史补读能力待核验。'));
+   const missing=w.coverage_shortfalls||{};
+   if(Object.values(missing).some(Boolean))box.append(el('p','rq-muted',`48 篇验收仍缺：${[['finance','金融'],['product','产品'],['mixed','混合/未知'],['history','历史']].filter(([k])=>missing[k]).map(([k,label])=>label+' '+missing[k]+' 篇').join('、')}。`));
+   if(w.worker_action==='no_executable_task')box.append(el('p','rq-muted','当前没有可执行的微信读书取文任务，其他通道继续更新。'));
    if(w72)box.append(el('p','rq-muted',`新通道观察 ${w72.hours} 小时 · ${w72.hour_buckets} 个真实样本小时 · 新增 ${w72.arrivals} / 首次读全 ${w72.completed} · 清积压工程目标 ${w72.engineering_target} 篇/天`));
    detail.append(box);
   }
