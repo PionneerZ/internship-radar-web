@@ -213,15 +213,21 @@ window.ReadingQueue = (() => {
   const w72=c.independent_window;
   const status=w72?(w72.assessment==='passed'&&q.independent?.state!=='pilot'?'passed':w72.assessment==='behind'?'behind':'observing'):c.assessment;
   const head=el('div','rq-capacity-head');head.append(el('strong','rq-capacity-state',({passed:'已追上 · 72 小时实测通过',behind:'实测产能尚未追上',observing:'补读中 · 仍在观察'})[status]||'仍在观察'),el('span','rq-muted',`今天新发现 ${c.today_discovered??0} / 首次读全 ${c.today_completed??0}`));root.append(head);
-  if(q.independent?.state){
-   const w=q.independent,box=el('div','rq-schedule rq-independent');
+  const w=q.independent,f=q.public_frontier;
+  const nums=el('div','rq-capacity-grid');for(const [n,t] of [[q.remaining,'本周未读'],[(q.retained_items||[]).filter(pending).length,'历史待补'],[q.all_pending,'全部待补'],[c.complete,'累计已读全']]){const b=el('div');b.append(el('strong','',n??'—'),el('span','',t));nums.append(b);}root.append(nums);
+  const detail=el('details','rq-capacity-detail');detail.open=s.opened.has('capacity');detail.ontoggle=()=>{if(detail.open)s.opened.add('capacity');else s.opened.delete('capacity');};
+  const progress=['查看补读进度'];
+  if(w?.state)progress.push(`微信读书读全 ${w.full??0} 篇`);
+  if(f)progress.push(`招聘网站今日 ${f.today_new_details_read} 个详情`);
+  detail.append(el('summary','',progress.join(' · ')));
+  if(w?.state){
+   const box=el('div','rq-schedule rq-independent');
    box.append(el('strong','',`微信读书 · ${w.state==='enabled'?'自动运行':'真实样本验证'}`),
     el('p','',`样本已判定 ${w.sample_evaluated??0} / ${w.sample_total??0} · 新取得正文 ${w.new_body??0} · 首次读全 ${w.full??0}`),
     el('p','rq-muted',w.history_state==='unavailable'?'历史列表读取失败，旧文继续保留在未读队列。':w.history_state==='verified'?'历史列表已有实际可读记录。':'历史补读能力待核验。'));
    if(w72)box.append(el('p','rq-muted',`新通道观察 ${w72.hours} 小时 · ${w72.hour_buckets} 个真实样本小时 · 新增 ${w72.arrivals} / 首次读全 ${w72.completed} · 清积压工程目标 ${w72.engineering_target} 篇/天`));
-   root.append(box);
+   detail.append(box);
   }
-  const f=q.public_frontier;
   if(f){
    const box=el('div','rq-schedule rq-independent');
    box.append(el('strong','',`网站独立补读 · 今日新读 ${f.today_new_details_read} 个详情`),
@@ -229,11 +235,9 @@ window.ReadingQueue = (() => {
    const coverage=el('p','rq-muted');
    if(f.index_state==='members_only')coverage.append(el('span','rq-index-progress',`招聘列表${f.index_oldest_date?`公开首屏最早 ${f.index_oldest_date}`:'首屏日期待核验'} · 后续分页需会员。`));
    coverage.append('网站详情不抵扣微信未读。');box.append(coverage);
-   root.append(box);
+   detail.append(box);
   }
   const failed=Object.entries(q.dispatch?.errors||{});if(failed.length)root.append(el('p','rq-schedule','后台启动失败：'+failed.map(([k,v])=>(lanes[k]?.[0]||k)+'（'+v+'）').join('、')+'。独立恢复将继续重试，其他通道不受阻。'));
-   const nums=el('div','rq-capacity-grid');for(const [n,t] of [[q.remaining,'本周未读'],[(q.retained_items||[]).filter(pending).length,'历史待补'],[q.all_pending,'全部待补'],[c.complete,'累计已读全']]){const b=el('div');b.append(el('strong','',n??'—'),el('span','',t));nums.append(b);}root.append(nums);
-  const detail=el('details','rq-capacity-detail');detail.open=s.opened.has('capacity');detail.ontoggle=()=>{if(detail.open)s.opened.add('capacity');else s.opened.delete('capacity');};detail.append(el('summary','','查看自动任务、失败与实际处理进度'));
   const ls=el('div','rq-lanes');
   for(const r of c.lanes||[]){if(!lanes[r.lane])continue;const [label,interval]=lanes[r.lane],last=r.finished_at||r.started_at,stale=!last||Date.now()-Date.parse(last)>(Math.max(interval*3,900))*1000;
    const state=r.state==='failed'?'失败，待自动重试':r.state==='interrupted'?'中断，待自动恢复':r.state==='running'?'正在处理':stale?'记录过旧，请检查后台':'最近执行完成';
