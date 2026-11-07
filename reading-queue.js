@@ -5,7 +5,9 @@ window.ReadingQueue = (() => {
  const time=v=>v&&Number.isFinite(Date.parse(v))?new Date(v).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}):'暂无记录';
  const topics={finance:'金融线索',product:'产品线索',roundup:'混合汇总',other:'方向待判'};
  const stages={queued:'排队等读取',verification:'实际触发验证',parse:'正文解析失败',images:'文章图片待补',complete:'已读全',location_skipped:'明确异地已跳过'};
- const pending=a=>a.stage!=='complete'&&a.stage!=='location_skipped';
+ const unread=a=>a.stage!=='complete'&&a.stage!=='location_skipped';
+ const filtered=a=>unread(a)&&a.read_priority==='skip';
+ const pending=a=>unread(a)&&!filtered(a);
  const previewRank=a=>a.excerpt_kind==='body'?2:a.card_evidence?1:0;
  function previewKey(a){
   if(!pending(a)||a.excerpt_kind!=='card'||a.title.length>=280||a.excerpt.length>=850)return '';
@@ -49,7 +51,7 @@ window.ReadingQueue = (() => {
   const entries=[
    ['today','今日值得看',jobs.filter(decisionToday).length,'新发现、临近截止或 JD 有变化'],
    ['ready','可直接判断',jobs.filter(decisionReady).length,'可看 JD 和投递方式，仍需核对条件'],
-   ['pending','待补读',queue?.all_pending??'—','先看标题方向；含排队与暂不可读'],
+   ['pending','待补读',queue?.all_pending!=null?queue.all_pending-(queue.all_metadata_filtered??0):'—','相关先读，方向不明限量抽查'],
    ['gaps',queue?.local_login?'需要你处理':'共同缺口',queue?.local_login?1:queue?gaps:'—',queue?.local_login?'一次登录恢复微信读书':'原图和同步缺口，无需逐篇查'],
   ];
   const active=document.activeElement?.dataset.decision;
@@ -84,7 +86,7 @@ window.ReadingQueue = (() => {
    function select(key,label,options){const box=el('label','',label),n=el('select');n.id=root.id+'-'+key;n.setAttribute('aria-label',label);for(const [v,t] of options){const o=el('option','',t);o.value=v;n.append(o);}n.onchange=()=>setFilter(s,key,n.value);box.append(n);s.controls.append(box);s[key+'Select']=n;}
    select('period','时间范围',[['week','近一周'],['all','全部积压'],['retained','移出本周仍未读']]);
    select('topic','线索方向',[['','全部方向'],...Object.entries(topics)]);
-    select('stage','处理状态',[['pending','全部未读'],['direction','方向明确 · 先看线索'],['official','官方 JD 已核实'],['card_evidence','卡片有职责或条件'],['deferred','低优先 · 保留复核'],['formal_review','疑似正式招聘待复核'],['blocked','实际读取受阻'],['partial','已有正文片段'],...Object.entries(stages),['group_images','群图片缺口'],['sources','来源同步缺口']]);
+   select('stage','处理状态',[['pending','待补读'],['direction','方向明确 · 先看线索'],['sample','方向不明 · 限量抽查'],['filtered','标题已筛除'],['official','官方 JD 已核实'],['card_evidence','卡片有职责或条件'],['formal_review','正式招聘线索'],['blocked','实际读取受阻'],['partial','已有正文片段'],...Object.entries(stages),['group_images','群图片缺口'],['sources','来源同步缺口']]);
    select('account','公众号',[['','全部公众号']]);
    const box=el('label','rq-search','搜索标题或已读片段');s.input=el('input');s.input.type='search';s.input.placeholder='产品、投研、实习汇总…';s.input.value=s.query;s.input.oninput=()=>setFilter(s,'query',s.input.value);box.append(s.input);s.controls.append(box);
    const reset=el('button','','重置');reset.onclick=()=>{Object.assign(s,{period:'week',stage:'pending',topic:'',account:'',query:'',page:0});s.input.value='';render(s);save(s);};s.controls.append(reset);
@@ -125,11 +127,11 @@ window.ReadingQueue = (() => {
  }
  function renderBatchHelp(s){
   const q=s.queue,all=[...(q.items||[]),...(q.retained_items||[])].filter(pending),images=all.filter(a=>a.stage==='images'),bodies=all.filter(a=>a.stage!=='images');
-  s.scheduleTitle.textContent=`${all.length} 篇未读由后台接续处理 · 展开查看共同原因和省力办法`;
+  s.scheduleTitle.textContent=`${all.length} 篇待补读 · ${q.all_metadata_filtered??0} 篇标题已筛除 · 展开查看共同缺口`;
   s.batchHelp.replaceChildren();
   const groups=new Map();for(const image of s.images){const name=image.source||'已授权招聘来源';groups.set(name,(groups.get(name)||0)+1);}
   const entries=[
-   ['正文待补',bodies.length+' 篇',q.cooldown_until?`共同等待验证冷却至 ${time(q.cooldown_until)}，到期仅正常试读 1 篇；成功后接续读取。`:'按来源和金融 / 产品方向轮换补读，保留历史和未知标题名额。','无需逐篇打开或反复刷新；缓存与图片通道仍独立工作。','pending'],
+   ['正文待补',bodies.length+' 篇',q.cooldown_until?`共同等待验证冷却至 ${time(q.cooldown_until)}，到期仅正常试读 1 篇；成功后接续读取。`:'金融、产品和实习汇总优先。微信正文通道每小时最多抽查 1 篇方向不明的文章。','无需逐篇打开或反复刷新；缓存与图片通道仍独立工作。','pending'],
    ['文章图片待补',images.length+' 篇','已读正文片段仍可查看；后台继续寻找和识别完整图片。空 OCR 不会被当作完成。','只有缺失的新原图或可靠复核能补齐的部分会继续明确保留。','images'],
    ['群图未读全',s.images.length+' 张 / '+groups.size+' 个来源',[...groups].map(([name,count])=>name+' '+count+' 张').join('；')||'当前没有群图片缺口。','后台每 30 分钟重查原图，也会从已保存的招聘文章查找清晰同版。','group_images'],
    ['来源历史待同步',(q.source_gaps||[]).length+' 个来源','本机未同步到的历史无法靠重复刷新补出；后台每 5 分钟复查已有授权来源。','具体来源和缺口集中列在下方。用途未知的来源仅记录数量，不擅自读取。','sources']
@@ -146,7 +148,7 @@ window.ReadingQueue = (() => {
   const evidence=candidates.filter(a=>pending(a)&&a.card_evidence);
   const quick=candidates.filter(a=>pending(a)&&['finance','product'].includes(a.title_hint));
   const checkedImages=s.images.filter(a=>a.verified_copy).length;
-  const summary=[['pending',candidates.filter(pending).length,'文章未读全','排队任务也保留'],['direction',quick.length,'方向明确 · 先看线索',`金融 ${quick.filter(a=>a.title_hint==='finance').length} · 产品 ${quick.filter(a=>a.title_hint==='product').length}`],['group_images',s.images.length,'群图未读全',checkedImages?`${checkedImages} 张已有同版结论`:'缺原图或识别不完整'],['sources',(q.source_gaps||[]).length,'来源同步缺口','本机历史未同步']];
+  const summary=[['pending',candidates.filter(pending).length,'待补读',`其中 ${candidates.filter(a=>pending(a)&&a.read_priority==='sample').length} 篇限量抽查`],['direction',quick.length,'方向明确 · 先看线索',`金融 ${quick.filter(a=>a.title_hint==='finance').length} · 产品 ${quick.filter(a=>a.title_hint==='product').length}`],['filtered',candidates.filter(filtered).length,'标题已筛除','可看原因及原卡片'],['group_images',s.images.length,'群图未读全',checkedImages?`${checkedImages} 张已有同版结论`:'缺原图或识别不完整']];
   for(const [key,count,label,hint] of summary){const b=el('button','rq-digest-button');b.setAttribute('aria-pressed',String(s.stage===key));b.append(el('strong','',count),el('span','',label),el('small','',hint));b.onclick=()=>{setFilter(s,'stage',key);s.digest.querySelector('[aria-pressed=true]').focus({preventScroll:true});};s.digest.append(b);}
   for(const k of ['period','stage','topic','account'])s[k+'Select'].value=s[k];
   const special=['group_images','sources'].includes(s.stage);
@@ -156,14 +158,27 @@ window.ReadingQueue = (() => {
   if(special){renderGaps(s);return;}
   const needle=s.query.trim().toLocaleLowerCase();
   const cardView=s.stage==='card_evidence';
-   const stageMatches=a=>s.stage==='pending'?pending(a):s.stage==='direction'?pending(a)&&['finance','product'].includes(a.title_hint):s.stage==='deferred'?pending(a)&&a.title_hint==='deferred':s.stage==='official'?pending(a)&&a.official_matches?.length:s.stage==='formal_review'?pending(a)&&a.formal_review:s.stage==='blocked'?['verification','parse','images'].includes(a.stage):s.stage==='partial'?pending(a)&&a.excerpt_kind==='body':a.stage===s.stage;
+  const stageMatches=a=>{
+   switch(s.stage){
+    case 'pending':return pending(a);
+    case 'direction':return pending(a)&&['finance','product'].includes(a.title_hint);
+    case 'sample':return pending(a)&&a.read_priority==='sample';
+    case 'filtered':case 'deferred':return filtered(a);
+    case 'official':return unread(a)&&a.official_matches?.length;
+    case 'formal_review':return unread(a)&&(a.formal_review||a.filter_reason==='employment_only');
+    case 'blocked':return pending(a)&&['verification','parse','images'].includes(a.stage);
+    case 'partial':return pending(a)&&a.excerpt_kind==='body';
+    default:return !filtered(a)&&a.stage===s.stage;
+   }
+  };
   const all=(cardView?evidence:candidates.filter(stageMatches))
    .filter(a=>(!s.topic||(cardView?a.card_evidence.topic===s.topic:a.topics.includes(s.topic)))&&(!s.account||a.account===s.account)&&(!needle||(a.title+' '+a.account+' '+a.excerpt).toLocaleLowerCase().includes(needle)))
-   .sort((a,b)=>(cardView?Number(Boolean(b.card_evidence.job_id))-Number(Boolean(a.card_evidence.job_id)):previewRank(b)-previewRank(a))||String(b.seen_at||'').localeCompare(a.seen_at||''));
+   .sort((a,b)=>(cardView?Number(Boolean(b.card_evidence.job_id))-Number(Boolean(a.card_evidence.job_id)):previewRank(b)-previewRank(a))||Number(a.read_priority==='sample')-Number(b.read_priority==='sample')||String(b.seen_at||'').localeCompare(a.seen_at||''));
   const groups=groupPreviews(all),folded=all.length-groups.length;
   const size=12,total=Math.max(1,Math.ceil(groups.length/size));s.page=Math.min(Math.max(0,s.page),total-1);
   const period=s.period==='week'?'近一周':s.period==='retained'?'历史队列':'全部保留任务';
-   s.result.textContent=`${all.length} 篇符合筛选 · ${period}${s.stage==='direction'?' · 按标题或简介先看方向，岗位和投递条件仍需核实':s.stage==='deferred'?' · 标题像攻略、招聘进度或相邻方向，原文保留复核':cardView?' · 查看已收到的职责或条件，原文仍待补':s.stage==='formal_review'?' · 卡片偏正式招聘，后台留名额复核，仍计未读':s.stage==='location_skipped'?' · 按地点跳过，未计为读全':' · 优先显示已有内容'}${folded?` · 已折叠 ${folded} 篇相同预览`:''}`;
+  const notes={direction:'按标题或简介先看方向，岗位和投递条件仍需核实',sample:'微信正文每小时最多抽查 1 篇',filtered:'已退出自动取文，保留原卡片和原因',deferred:'已退出自动取文，保留原卡片和原因',card_evidence:'查看已收到的职责或条件，原文仍待补',formal_review:'按标题或简介识别，实际读全单列',location_skipped:'按地点跳过，未计为读全'};
+  s.result.textContent=`${all.length} 篇符合筛选 · ${period} · ${notes[s.stage]||'优先显示已有内容'}${folded?` · 已折叠 ${folded} 篇相同预览`:''}`;
   if(!all.length)s.list.append(el('p','rq-empty','没有符合筛选的内容。重置筛选可查看其他未读任务。'));
   for(const group of groups.slice(s.page*size,(s.page+1)*size)){
    const row=article(group.first,s);
@@ -179,7 +194,7 @@ window.ReadingQueue = (() => {
   const h=el('h3');h.append(originalLink(a,a.title||'标题尚未取得'));row.append(h);
   if(a.official_matches?.length)row.append(el('p','rq-official','官方原帖已核实 · 微信转载仍未读全'));
   row.append(el('p','rq-next-action',action.next_action));
-   const note=action.retry_at?retry(action.retry_at):action.blocker==='image_review'?'等待新增原图或有效复核，不重复空跑 OCR':a.stage==='complete'?'岗位状态以最新原文为准':a.stage==='location_skipped'?'已保留来源记录':'后台保留任务，等待可处理条件';
+  const note=action.retry_at?retry(action.retry_at):action.blocker==='image_review'?'等待新增原图或有效复核，不重复空跑 OCR':a.stage==='complete'?'岗位状态以最新原文为准':filtered(a)||a.stage==='location_skipped'?'已保留来源记录':a.read_priority==='sample'?'保留少量抽查名额':'后台保留任务，等待可处理条件';
   row.append(el('p','rq-retry',note));
   for(const gap of action.image_gaps||[])row.append(el('span','rq-gap-tag',`第 ${gap.number} 张 · ${gap.reason}`));
   const hint=a.card_evidence,evidence=el('div','rq-evidence');
@@ -214,7 +229,7 @@ window.ReadingQueue = (() => {
   const status=w72?(w72.assessment==='passed'&&q.independent?.state!=='pilot'?'passed':w72.assessment==='behind'?'behind':'observing'):c.assessment;
   const head=el('div','rq-capacity-head');head.append(el('strong','rq-capacity-state',({passed:'已追上 · 72 小时实测通过',behind:'实测产能尚未追上',observing:'补读中 · 仍在观察'})[status]||'仍在观察'),el('span','rq-muted',`今天新发现 ${c.today_discovered??0} / 首次读全 ${c.today_completed??0}`));root.append(head);
   const w=q.independent,f=q.public_frontier;
-  const nums=el('div','rq-capacity-grid');for(const [n,t] of [[q.remaining,'本周未读'],[(q.retained_items||[]).filter(pending).length,'历史待补'],[q.all_pending,'全部待补'],[c.complete,'累计已读全']]){const b=el('div');b.append(el('strong','',n??'—'),el('span','',t));nums.append(b);}root.append(nums);
+  const nums=el('div','rq-capacity-grid');for(const [n,t] of [[q.remaining,'本周未读全'],[(q.retained_items||[]).filter(unread).length,'历史未读全'],[q.all_pending,'全部未读全'],[c.complete,'累计已读全']]){const b=el('div');b.append(el('strong','',n??'—'),el('span','',t));nums.append(b);}root.append(nums);
   const detail=el('details','rq-capacity-detail');detail.open=s.opened.has('capacity');detail.ontoggle=()=>{if(detail.open)s.opened.add('capacity');else s.opened.delete('capacity');};
   const progress=['查看补读进度'];
   if(w?.state)progress.push(`微信读书读全 ${w.full??0} 篇`);
@@ -252,7 +267,7 @@ window.ReadingQueue = (() => {
    }
    const offline=q.offline;
     if(offline)detail.append(el('p','',`群文件读全 ${offline.documents_read} 份（含转发 ${offline.documents_forwarded_read??0} 份），部分读取 ${offline.documents_partial} 份，待处理 ${offline.documents_pending} 份。浏览器缓存上轮核对 ${offline.checked_articles} 篇，命中 ${offline.browser_matches} 篇。`));
-   detail.append(el('p','',`观察期新增 ${c.arrivals_observed??0} / 首次读全 ${c.completed_observed??0}；按原口径积压 ${c.baseline_pending??0} → ${c.pending}。异地跳过不计入读全。已观察 ${c.elapsed_hours??0} 小时，${c.observed_hour_buckets??0} 个小时有实际记录。`));
+   detail.append(el('p','',`观察期新增 ${c.arrivals_observed??0} / 首次读全 ${c.completed_observed??0}；按原口径积压 ${c.baseline_pending??0} → ${c.pending}。标题筛除仍保留在原口径账中。已观察 ${c.elapsed_hours??0} 小时，${c.observed_hour_buckets??0} 个小时有实际记录。`));
   detail.append(el('p','',`初始导入 ${c.bootstrap_total??0} 篇、历史找回 ${c.recovered_total??0} 篇均单列，不算新读全。最早未读任务：${time(c.oldest_pending_at)}。`));
   for(const d of c.daily||[])detail.append(el('p','',`${d.date}：新发现 ${d.discovered} / 首次读全 ${d.completed}`));
   detail.append(el('p','rq-muted','72 个日历小时内至少 60 个小时有真实样本，连续三日读全不落后新增且总积压下降，才认定追上；未满足时不估算清空日期。'));root.append(detail);
