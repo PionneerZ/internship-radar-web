@@ -228,6 +228,7 @@ window.ReadingQueue = (() => {
   const w72=c.independent_window;
   const status=w72?(w72.assessment==='passed'&&q.independent?.state!=='pilot'?'passed':w72.assessment==='behind'?'behind':'observing'):c.assessment;
   const head=el('div','rq-capacity-head');head.append(el('strong','rq-capacity-state',({passed:'已追上 · 72 小时实测通过',behind:'实测产能尚未追上',observing:'补读中 · 仍在观察'})[status]||'仍在观察'),el('span','rq-muted',`今天新发现 ${c.today_discovered??0} / 首次读全 ${c.today_completed??0}`));root.append(head);
+   if(c.last_24h){const {discovered,completed}=c.last_24h;root.append(el('p','rq-muted',`近 24 小时（按当前采集范围）新增 ${discovered} 篇 · 首次读全 ${completed} 篇`));}
   const w=q.independent,f=q.public_frontier;
   const nums=el('div','rq-capacity-grid');for(const [n,t] of [[q.remaining,'本周未读全'],[(q.retained_items||[]).filter(unread).length,'历史未读全'],[q.all_pending,'全部未读全'],[c.complete,'累计已读全']]){const b=el('div');b.append(el('strong','',n??'—'),el('span','',t));nums.append(b);}root.append(nums);
   const detail=el('details','rq-capacity-detail');detail.open=s.opened.has('capacity');detail.ontoggle=()=>{if(detail.open)s.opened.add('capacity');else s.opened.delete('capacity');};
