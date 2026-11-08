@@ -40,11 +40,12 @@ window.ReadingQueue = (() => {
    heading.append(title,toggle);
    const controls=el('div','rq-clue-controls');controls.id='role-clues-controls';
    const period=el('select'),periodLabel=el('label','','时间');
+   period.setAttribute('aria-label',periodLabel.textContent);
    for(const [value,label] of [['week','近七天'],['all','含历史']]){
     const option=el('option','',label);option.value=value;period.append(option);
    }
    periodLabel.append(period);
-   const pool=el('select'),poolLabel=el('label','','方向');poolLabel.append(pool);
+   const pool=el('select'),poolLabel=el('label','','方向');pool.setAttribute('aria-label',poolLabel.textContent);poolLabel.append(pool);
    const search=el('input'),searchLabel=el('label','','机构或岗位');search.type='search';search.placeholder='搜索岗位线索';searchLabel.append(search);
    controls.append(periodLabel,poolLabel,searchLabel);
    const result=el('span','rq-muted');result.setAttribute('role','status');
@@ -216,7 +217,8 @@ window.ReadingQueue = (() => {
    const row=el('li'),action=a.action||{};
    const top=el('div','rq-item-top');
    top.append(el('span','rq-badge',action.label||a.stage_label),el('span','rq-muted',a.account+' · '+time(a.seen_at)));
-   const clock=el('p','rq-muted',`实际访问 ${a.attempt_count} 次 · ${retry(action.retry_at||a.next_retry_at)}`);
+   const next=a.read_priority==='clue'?'已按线索展示':retry(action.retry_at||a.next_retry_at);
+   const clock=el('p','rq-muted',`实际访问 ${a.attempt_count} 次 · ${next}`);
    const links=el('div','rq-evidence-actions');
    for(const match of a.official_matches||[]){
     const jd=el('a','rq-existing-jd','官方 JD 已核实 · 转载未读全');jd.href=jobLink(match);links.append(jd);
