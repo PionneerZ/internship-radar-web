@@ -7,10 +7,11 @@ window.ReadingQueue = (() => {
  const stages={queued:'排队等读取',verification:'实际触发验证',parse:'正文解析失败',images:'文章图片待补',complete:'已读全',location_skipped:'明确异地已跳过'};
  const unread=a=>a.stage!=='complete'&&a.stage!=='location_skipped';
  const filtered=a=>unread(a)&&a.read_priority==='skip';
- const pending=a=>unread(a)&&!filtered(a);
+ const pending=a=>unread(a)&&!filtered(a)&&a.read_priority!=='clue';
+ const direction=a=>unread(a)&&Boolean(a.role_clue);
  const previewRank=a=>a.excerpt_kind==='body'?2:a.card_evidence?1:0;
  function previewKey(a){
-  if(!pending(a)||a.excerpt_kind!=='card'||a.title.length>=280||a.excerpt.length>=850)return '';
+  if(!unread(a)||filtered(a)||a.excerpt_kind!=='card'||a.title.length>=280||a.excerpt.length>=850)return '';
   const title=a.title.replace(/\s+/g,' ').trim(),excerpt=a.excerpt.replace(/\s+/g,' ').trim();
   return title&&excerpt.length>=20?JSON.stringify([title,excerpt]):'';
  }
@@ -24,6 +25,92 @@ window.ReadingQueue = (() => {
    if(key)previews.set(key,group);
   }
   return groups;
+ }
+ const cluePools={core:'核心投研',quant:'交易量化',primary:'一级投行',adjacent:'战略咨询及相邻',unassigned:'细分待确认'};
+ const clueStates=new WeakMap();
+ function mountClues(jobs,queue,topic,known=[]){
+  if(!jobs||!queue)return;
+  let s=clueStates.get(jobs);
+  if(s?.queue===queue&&s?.known===known)return;
+  if(!s){
+   const panel=el('section','rq-clues');panel.id='role-clues';panel.setAttribute('aria-labelledby','role-clues-title');
+   const title=el('h2','','岗位线索');title.id='role-clues-title';
+   const status=el('p','rq-muted'),heading=el('div','rq-clues-head');
+   const toggle=el('button','rq-clue-toggle');toggle.type='button';toggle.setAttribute('aria-controls','role-clues-controls');
+   heading.append(title,toggle);
+   const controls=el('div','rq-clue-controls');controls.id='role-clues-controls';
+   const period=el('select'),periodLabel=el('label','','时间');
+   for(const [value,label] of [['week','近七天'],['all','含历史']]){
+    const option=el('option','',label);option.value=value;period.append(option);
+   }
+   periodLabel.append(period);
+   const pool=el('select'),poolLabel=el('label','','方向');poolLabel.append(pool);
+   const search=el('input'),searchLabel=el('label','','机构或岗位');search.type='search';search.placeholder='搜索岗位线索';searchLabel.append(search);
+   controls.append(periodLabel,poolLabel,searchLabel);
+   const result=el('span','rq-muted');result.setAttribute('role','status');
+   const list=el('div','rq-clue-list');
+   const more=el('button','rq-clue-toggle','显示更多');more.type='button';
+   panel.append(heading,status,controls,list,result,more);
+   (jobs.querySelector('#inbox')||jobs.querySelector('.page-heading'))?.after(panel);
+   if(!panel.isConnected)jobs.prepend(panel);
+   s={panel,status,controls,toggle,list,period,pool,search,result,more,expanded:false,limit:12};
+   clueStates.set(jobs,s);
+   toggle.onclick=()=>{
+    s.expanded=!s.expanded;renderClues(s);
+    if(s.expanded)period.focus({preventScroll:true});
+   };
+   for(const [field,event] of [[period,'change'],[pool,'change'],[search,'input']])
+    field.addEventListener(event,()=>{s.limit=12;renderClues(s);});
+   more.onclick=()=>{
+    const prior=s.list.children.length;
+    s.limit+=12;renderClues(s);s.list.children[prior]?.querySelector('a')?.focus({preventScroll:true});
+   };
+  }
+  Object.assign(s,{queue,known,topic});
+  const localJobs=new Set(known.map(j=>j.id));
+  const visible=a=>direction(a)&&a.role_clue.topic===topic&&![
+   a.card_evidence,...(a.read_priority==='clue'?a.official_matches||[]:[]),
+  ].some(match=>match?.topic===topic&&localJobs.has(match.job_id));
+  s.week=(queue.items||[]).filter(visible);
+  s.history=(queue.retained_items||[]).filter(visible);
+  const selected=s.pool.value;
+  s.pool.replaceChildren(el('option','','全部方向'));s.pool.options[0].value='';
+  const pools=[...new Set([...s.week,...s.history].map(a=>a.role_clue.pool))];
+  for(const key of pools.sort((a,b)=>Object.keys(cluePools).indexOf(a)-Object.keys(cluePools).indexOf(b))){
+   const option=el('option','',cluePools[key]||key);option.value=key;s.pool.append(option);
+  }
+  s.pool.value=pools.includes(selected)?selected:'';
+  renderClues(s);
+ }
+ function renderClues(s){
+  s.panel.hidden=!s.week.length&&!s.history.length;
+  s.toggle.setAttribute('aria-expanded',String(s.expanded));
+  s.toggle.textContent=s.expanded?'收起线索':`查看全部 · ${s.week.length+s.history.length} 条`;
+  s.controls.hidden=!s.expanded;
+  s.status.textContent=`近七天 ${s.week.length} 条 · 按标题或卡片归类，投递与条件待核`;
+  if(!s.expanded&&!s.week.length)s.status.textContent='近七天暂无新线索，可展开查看历史。';
+  const needle=s.expanded?s.search.value.trim().toLocaleLowerCase():'';
+  const pool=s.expanded?s.pool.value:'';
+  const source=s.expanded&&s.period.value==='all'?[...s.week,...s.history]:s.week;
+  const rows=source.filter(a=>(!pool||a.role_clue.pool===pool)&&(!needle||
+   [a.role_clue.heading,a.role_clue.label,a.title].join(' ').toLocaleLowerCase().includes(needle)))
+   .sort((a,b)=>Number(a.role_clue.pool==='unassigned')-Number(b.role_clue.pool==='unassigned')||
+    String(b.seen_at||'').localeCompare(a.seen_at||''));
+  const groups=groupPreviews(rows),limit=s.expanded?s.limit:3;
+  s.list.replaceChildren();
+  for(const {first:a,others} of groups.slice(0,limit)){
+   const clue=a.role_clue,card=el('article','rq-clue');card.dataset.cluePool=clue.pool;
+   const label=el('div','rq-clue-label');
+   label.append(el('span','',cluePools[clue.pool]||clue.pool),el('span','rq-muted',clue.label===clue.pool?'':clue.label));
+   const title=el('h3');
+   if(a.url)title.append(originalLink(a,clue.heading||a.title));else title.textContent=clue.heading||a.title;
+   const evidence=[clue.cities.join(' / ')||'地点待核',clue.basis==='card'?'卡片线索':'标题线索',time(a.seen_at)];
+   if(others.length)evidence.push(`${others.length+1} 条相同预览`);
+   card.append(label,title,el('p','rq-muted',evidence.join(' · ')));
+   s.list.append(card);
+  }
+  s.result.textContent=s.expanded?(groups.length?`显示 ${Math.min(groups.length,limit)} / ${groups.length} 条线索`:'没有符合筛选的线索。'):'';
+  s.more.hidden=!s.expanded||groups.length<=limit;
  }
  function jobLink(evidence){
   const finance=evidence.topic==='finance';
@@ -68,7 +155,7 @@ window.ReadingQueue = (() => {
    ['new_ready','今日新增可判断',jobs.some(j=>j.decision)?jobs.filter(decisionNew).length:'—','首次补齐岗位和投递证据'],
    ['open','已确认开放',jobs.some(j=>j.decision)?jobs.filter(decisionOpen).length:'—','官方页面确认仍开放的岗位'],
    ['ready','可直接判断',jobs.filter(decisionReady).length,'可看 JD 和投递方式，仍需核对条件'],
-   ['pending','待补读',queue?.all_pending!=null?queue.all_pending-(queue.all_metadata_filtered??0):'—','相关先读，方向不明限量抽查'],
+   ['pending','自动补读',queue?.all_pending!=null?queue.all_pending-(queue.all_metadata_filtered??0)-(queue.all_metadata_classified??0):'—','补汇总及缺图，方向不明限量抽查'],
    ['gaps','还缺什么',queue?.local_login?1:queue?gaps:'—',queue?.local_login?'一次登录恢复微信读书':top||'查看原图和同步缺口'],
   ];
   const active=document.activeElement?.dataset.decision;
@@ -144,7 +231,7 @@ window.ReadingQueue = (() => {
  }
  function renderBatchHelp(s){
   const q=s.queue,all=[...(q.items||[]),...(q.retained_items||[])].filter(pending),images=all.filter(a=>a.stage==='images'),bodies=all.filter(a=>a.stage!=='images');
-  s.scheduleTitle.textContent=`${all.length} 篇待补读 · ${q.all_metadata_filtered??0} 篇标题已筛除 · 展开查看共同缺口`;
+  s.scheduleTitle.textContent=`${all.length} 篇待补读 · ${q.all_metadata_classified??0} 篇按线索展示 · ${q.all_metadata_filtered??0} 篇筛除 · 展开查看共同缺口`;
   s.batchHelp.replaceChildren();
   const groups=new Map();for(const image of s.images){const name=image.source||'已授权招聘来源';groups.set(name,(groups.get(name)||0)+1);}
   const entries=[
@@ -162,10 +249,10 @@ window.ReadingQueue = (() => {
   renderCapacity(s.capacity,q.capacity,q,s);
    renderBatchHelp(s);
   s.digest.replaceChildren();
-  const evidence=candidates.filter(a=>pending(a)&&a.card_evidence);
-  const quick=candidates.filter(a=>pending(a)&&['finance','product'].includes(a.title_hint));
+  const evidence=candidates.filter(a=>unread(a)&&!filtered(a)&&a.card_evidence);
+  const quick=candidates.filter(direction);
   const checkedImages=s.images.filter(a=>a.verified_copy).length;
-  const summary=[['pending',candidates.filter(pending).length,'待补读',`其中 ${candidates.filter(a=>pending(a)&&a.read_priority==='sample').length} 篇限量抽查`],['direction',quick.length,'方向明确 · 先看线索',`金融 ${quick.filter(a=>a.title_hint==='finance').length} · 产品 ${quick.filter(a=>a.title_hint==='product').length}`],['filtered',candidates.filter(filtered).length,'标题已筛除','可看原因及原卡片'],['group_images',s.images.length,'群图未读全',checkedImages?`${checkedImages} 张已有同版结论`:'缺原图或识别不完整']];
+  const summary=[['pending',candidates.filter(pending).length,'待补读',`其中 ${candidates.filter(a=>pending(a)&&a.read_priority==='sample').length} 篇限量抽查`],['direction',quick.length,'已归类线索',`金融 ${quick.filter(a=>a.role_clue.topic==='finance').length} · 产品 ${quick.filter(a=>a.role_clue.topic==='product').length}`],['filtered',candidates.filter(filtered).length,'已筛除','可看原因及原卡片'],['group_images',s.images.length,'群图未读全',checkedImages?`${checkedImages} 张已有同版结论`:'缺原图或识别不完整']];
   for(const [key,count,label,hint] of summary){const b=el('button','rq-digest-button');b.setAttribute('aria-pressed',String(s.stage===key));b.append(el('strong','',count),el('span','',label),el('small','',hint));b.onclick=()=>{setFilter(s,'stage',key);s.digest.querySelector('[aria-pressed=true]').focus({preventScroll:true});};s.digest.append(b);}
   for(const k of ['period','stage','topic','account'])s[k+'Select'].value=s[k];
   const special=['group_images','sources'].includes(s.stage);
@@ -178,7 +265,7 @@ window.ReadingQueue = (() => {
   const stageMatches=a=>{
    switch(s.stage){
     case 'pending':return pending(a);
-    case 'direction':return pending(a)&&['finance','product'].includes(a.title_hint);
+    case 'direction':return direction(a);
     case 'sample':return pending(a)&&a.read_priority==='sample';
     case 'filtered':case 'deferred':return filtered(a);
     case 'official':return unread(a)&&a.official_matches?.length;
@@ -219,7 +306,8 @@ window.ReadingQueue = (() => {
   evidence.append(el('span','rq-evidence-label',label));
   if(hint||a.excerpt_kind!=='title')evidence.append(el('p','rq-excerpt',hint?.quote||a.excerpt));row.append(evidence);
   const foot=el('div','rq-item-foot'),actions=el('div','rq-evidence-actions');
-  foot.append(el('span','rq-topic',hint?[hint.label,hint.cities.join(' / ')||'地点待确认'].join(' · '):a.topics.map(t=>topics[t]).join(' / ')));
+  const role=a.role_clue||hint;
+  foot.append(el('span','rq-topic',role?[role.label,role.cities.join(' / ')||'地点待确认'].join(' · '):a.topics.map(t=>topics[t]).join(' / ')));
   for(const match of a.official_matches||[]){const jd=el('a','rq-existing-jd','查看官方 JD');jd.href=jobLink(match);actions.append(jd);}
   if(hint?.job_id&&!a.official_matches?.some(m=>m.job_id===hint.job_id)){const jd=el('a','rq-existing-jd','看已收录 JD');jd.href=jobLink(hint);actions.append(jd);}
   actions.append(originalLink(a,'打开原文 ↗'));foot.append(actions);row.append(foot);
@@ -290,5 +378,5 @@ window.ReadingQueue = (() => {
   for(const d of c.daily||[])detail.append(el('p','',`${d.date}：新发现 ${d.discovered} / 首次读全 ${d.completed}`));
   detail.append(el('p','rq-muted','72 个日历小时内至少 60 个小时有真实样本，连续三日读全不落后新增且总积压下降，才认定追上；未满足时不估算清空日期。'));root.append(detail);
  }
- return {mount,show,decisions,decisionReady,decisionToday,decisionNew,decisionOpen,decisionMissing};
+ return {mount,mountClues,show,decisions,decisionReady,decisionToday,decisionNew,decisionOpen,decisionMissing};
 })();
