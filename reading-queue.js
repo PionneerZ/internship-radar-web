@@ -11,7 +11,11 @@ window.ReadingQueue = (() => {
  const sample=a=>unread(a)&&a.read_priority==='sample';
  const pending=a=>priority(a)||sample(a);
  const direction=a=>unread(a)&&a.read_priority==='clue';
- const weekPriority=q=>q?.items?.filter(priority).length;
+ function weekQueue(q){
+  if(!q?.items)return null;
+  const first=q.items.filter(priority).length, checks=q.items.filter(sample).length;
+  return {priority:first,sample:checks,total:first+checks};
+ }
  const previewRank=a=>a.excerpt_kind==='body'?2:a.card_evidence?1:0;
  function previewKey(a){
   if(!unread(a)||filtered(a)||a.excerpt_kind!=='card'||a.title.length>=280||a.excerpt.length>=850)return '';
@@ -149,6 +153,7 @@ window.ReadingQueue = (() => {
  }
  function decisions(root,queue,jobs,images,onAction){
   if(!root)return;
+  const backlog=weekQueue(queue);
   const missing=(images||[]).filter(x=>!x.verified_copy).length;
   const gaps=missing+(queue?.source_gaps?.length||0);
   const wanted=jobs.filter(j=>!j.excluded_reason&&!j.bank_gate&&j.decision?.opening!=='closed');
@@ -159,7 +164,7 @@ window.ReadingQueue = (() => {
    ['new_ready','今日新增可判断',jobs.some(j=>j.decision)?jobs.filter(decisionNew).length:'—','首次补齐岗位和投递证据'],
    ['open','已确认开放',jobs.some(j=>j.decision)?jobs.filter(decisionOpen).length:'—','官方页面确认仍开放的岗位'],
    ['ready','可直接判断',jobs.filter(decisionReady).length,'可看 JD 和投递方式，仍需核对条件'],
-   ['pending','近七天优先补读',weekPriority(queue)??'—','正文与文章图片，抽查单列'],
+   ['pending','近七天补读队列',backlog?.total??'—',backlog?`优先补读 ${backlog.priority} · 限量抽查 ${backlog.sample}`:'补读清单暂不可用'],
    ['gaps','还缺什么',queue?.local_login?1:queue?gaps:'—',queue?.local_login?'一次登录恢复微信读书':top||'查看原图和同步缺口'],
   ];
   const active=document.activeElement?.dataset.decision;
@@ -167,14 +172,14 @@ window.ReadingQueue = (() => {
   for(const [key,label,count,hint] of entries){
    const b=el('button','rq-decision');b.type='button';b.dataset.decision=key;
    b.append(el('span','rq-decision-label',label),el('strong','',count),el('small','',hint));
-   b.onclick=()=>onAction(key,key==='gaps'?(missing?'group_images':'sources'):'priority');root.append(b);
+   b.onclick=()=>onAction(key,key==='gaps'?(missing?'group_images':'sources'):'pending');root.append(b);
    if(key===active)b.focus({preventScroll:true});
   }
  }
  const states=new WeakMap();
  function show(root,stage){
   const s=states.get(root);if(!s)return;
-  Object.assign(s,{period:stage==='priority'?'week':'all',stage,topic:'',account:'',query:'',page:0});s.input.value='';render(s);save(s);
+  Object.assign(s,{period:['priority','pending'].includes(stage)?'week':'all',stage,topic:'',account:'',query:'',page:0});s.input.value='';render(s);save(s);
   s.stageSelect.focus({preventScroll:true});root.scrollIntoView({block:'start'});
  }
  function setFilter(s,key,value){s[key]=value;s.page=0;render(s);save(s);}
@@ -187,9 +192,9 @@ window.ReadingQueue = (() => {
   s.queue=queue;s.images=images;
   if(!s.ui){
    root.classList.add('reading-queue');
-   const head=el('div','rq-heading'),title=el('div');title.append(el('h2','','自动补读'),el('p','rq-muted','先按标题和卡片分流，再补有用的正文和图片。'));s.updated=el('span','rq-muted');head.append(title,s.updated);
-   s.capacity=el('section','rq-capacity');s.capacity.setAttribute('aria-label','自动补读与积压');
-   const ledger=el('details','rq-ledger');s.ledgerTitle=el('summary');ledger.append(s.ledgerTitle,s.capacity);
+   const head=el('div','rq-heading'),title=el('div');s.heading=el('h2');title.append(s.heading,el('p','rq-muted','先补有用的正文和图片，汇总和方向不明的材料限量抽查。'));s.updated=el('span','rq-muted');head.append(title,s.updated);
+   s.capacity=el('section','rq-capacity');s.capacity.setAttribute('aria-label','原文覆盖与读全进度');
+   const ledger=el('details','rq-ledger');s.screening=el('div','rq-digest rq-screening');ledger.append(el('summary','','查看分流记录与原文覆盖'),s.screening,s.capacity);
    s.schedule=el('details','rq-schedule');s.scheduleTitle=el('summary');s.batchHelp=el('div','rq-batch-help');s.schedule.append(s.scheduleTitle,s.batchHelp);s.digest=el('div','rq-digest');
    const overview=el('div','rq-overview');overview.append(s.schedule,ledger);
    s.controls=el('div','rq-controls');
@@ -253,19 +258,21 @@ window.ReadingQueue = (() => {
   const q=s.queue,historyItems=q.retained_items||[],current=q.items||[];
   const candidates=s.period==='retained'?historyItems:s.period==='all'?[...current,...historyItems]:current;
   s.updated.textContent=`处理截至 ${time(q.updated_at)} · 京沪、明确远程及地点待确认`;
-  s.ledgerTitle.textContent=`原文覆盖 · 近七天 ${q.remaining??'—'} 篇未读全`;
   renderCapacity(s.capacity,q.capacity,q,s);
   renderBatchHelp(s);
-  s.digest.replaceChildren();
+  s.digest.replaceChildren();s.screening.replaceChildren();
   const evidence=candidates.filter(a=>unread(a)&&!filtered(a)&&a.card_evidence);
-  const focus=candidates.filter(priority),images=focus.filter(a=>a.stage==='images').length,quick=candidates.filter(direction);
+  const focus=candidates.filter(priority),checks=candidates.filter(sample).length;
+  const images=focus.filter(a=>a.stage==='images').length,quick=candidates.filter(direction);
+  const period=s.period==='week'?'近七天':s.period==='retained'?'七天以前':'全部保留记录';
+  s.heading.textContent=`${period}补读队列 · ${focus.length+checks} 篇`;
   const summary=[
    ['priority',focus.length,'优先补读',`正文 ${focus.length-images} · 图片 ${images}`],
-   ['sample',candidates.filter(sample).length,'限量抽查','汇总或方向待判'],
+   ['sample',checks,'限量抽查','汇总或方向待判'],
    ['direction',quick.length,'已归类线索',`金融 ${quick.filter(a=>a.role_clue?.topic==='finance').length} · 产品 ${quick.filter(a=>a.role_clue?.topic==='product').length}`],
    ['filtered',candidates.filter(filtered).length,'已筛除','可查看原因和原卡片'],
   ];
-  for(const [key,count,label,hint] of summary){const b=el('button','rq-digest-button');b.type='button';b.dataset.stage=key;b.setAttribute('aria-pressed',String(s.stage===key));b.append(el('strong','',count),el('span','',label),el('small','',hint));b.onclick=()=>{setFilter(s,'stage',key);s.digest.querySelector('[aria-pressed=true]').focus({preventScroll:true});};s.digest.append(b);}
+  for(const [key,count,label,hint] of summary){const group=key==='priority'||key==='sample'?s.digest:s.screening;const b=el('button','rq-digest-button');b.type='button';b.dataset.stage=key;b.setAttribute('aria-pressed',String(s.stage===key));b.append(el('strong','',count),el('span','',label),el('small','',hint));b.onclick=()=>{setFilter(s,'stage',key);group.querySelector('[aria-pressed=true]').focus({preventScroll:true});};group.append(b);}
   for(const k of ['period','stage','topic','account'])s[k+'Select'].value=s[k];
   const special=['group_images','sources'].includes(s.stage);
   for(const k of ['period','topic','account'])s[k+'Select'].disabled=special;
@@ -294,8 +301,7 @@ window.ReadingQueue = (() => {
    .sort((a,b)=>(cardView?Number(Boolean(b.card_evidence.job_id))-Number(Boolean(a.card_evidence.job_id)):previewRank(b)-previewRank(a))||Number(a.read_priority==='sample')-Number(b.read_priority==='sample')||String(b.seen_at||'').localeCompare(a.seen_at||''));
   const groups=groupPreviews(all),folded=all.length-groups.length;
   const size=12,total=Math.max(1,Math.ceil(groups.length/size));s.page=Math.min(Math.max(0,s.page),total-1);
-  const period=s.period==='week'?'近七天':s.period==='retained'?'七天以前':'全部保留记录';
-  const notes={priority:'待补正文或文章图片',body:'优先补读和限量抽查中的正文',direction:'按标题或简介先看方向，岗位和投递条件仍需核实',sample:'微信正文每小时最多抽查 1 篇',filtered:'已退出自动取文，保留原卡片和原因',deferred:'已退出自动取文，保留原卡片和原因',card_evidence:'查看已收到的职责或条件，原文仍待补',formal_review:'按标题或简介识别，实际读全单列',location_skipped:'按地点跳过，未计为读全'};
+  const notes={priority:'待补正文或文章图片',pending:'优先补读与限量抽查',body:'优先补读和限量抽查中的正文',direction:'按标题或简介先看方向，岗位和投递条件仍需核实',sample:'微信正文每小时最多抽查 1 篇',filtered:'已退出自动取文，保留原卡片和原因',deferred:'已退出自动取文，保留原卡片和原因',card_evidence:'查看已收到的职责或条件，原文仍待补',formal_review:'按标题或简介识别，实际读全单列',location_skipped:'按地点跳过，未计为读全'};
   s.result.textContent=`${all.length} 篇符合筛选 · ${period} · ${notes[s.stage]||'优先显示已有内容'}${folded?` · 已折叠 ${folded} 篇相同预览`:''}`;
   if(!all.length)s.list.append(el('p','rq-empty','没有符合筛选的内容。重置筛选可查看其他未读任务。'));
   for(const group of groups.slice(s.page*size,(s.page+1)*size)){
@@ -343,7 +349,7 @@ window.ReadingQueue = (() => {
   if(!rows.length)s.list.append(el('p','rq-empty',group?'当前没有已记录的群图缺口。':'当前没有已授权来源的同步缺口；用途待确认的来源不会擅自采集。'));
  }
  function renderCapacity(root,c,q,s){
-  root.replaceChildren(el('p','rq-muted','原文未读全包括优先补读、限量抽查、已归类线索及已筛除。明确异地另计 '+(q.all_location_skipped??0)+' 篇。'));
+  root.replaceChildren(el('p','rq-muted','原文覆盖按正文和必要图片核对，已归类和已筛除也计入未读全。明确异地另计 '+(q.all_location_skipped??0)+' 篇。'));
   if(!c||c.pending==null){root.append(el('p','rq-muted','自动处理记录暂不可用，无法判断是否追上更新。'));return;}
   const w72=c.independent_window;
   const status=w72?(w72.assessment==='passed'&&q.independent?.state!=='pilot'?'passed':w72.assessment==='behind'?'behind':'observing'):c.assessment;
@@ -393,5 +399,5 @@ window.ReadingQueue = (() => {
   for(const d of c.daily||[])detail.append(el('p','',`${d.date}：新发现 ${d.discovered} / 首次读全 ${d.completed}`));
   detail.append(el('p','rq-muted','72 个日历小时内至少 60 个小时有真实样本，连续三日读全不落后新增且总积压下降，才认定追上；未满足时不估算清空日期。'));root.append(detail);
  }
- return {mount,mountClues,show,decisions,decisionReady,decisionToday,decisionNew,decisionOpen,decisionMissing,weekPriority};
+ return {mount,mountClues,show,decisions,decisionReady,decisionToday,decisionNew,decisionOpen,decisionMissing,weekQueue,weekPriority:q=>weekQueue(q)?.priority};
 })();
