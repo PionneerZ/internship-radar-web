@@ -196,7 +196,7 @@ window.ReadingQueue = (() => {
    function select(key,label,options){const box=el('label','',label),n=el('select');n.id=root.id+'-'+key;n.setAttribute('aria-label',label);for(const [v,t] of options){const o=el('option','',t);o.value=v;n.append(o);}n.onchange=()=>setFilter(s,key,n.value);box.append(n);s.controls.append(box);s[key+'Select']=n;}
    select('period','时间范围',[['week','近七天'],['all','全部保留记录'],['retained','七天以前']]);
    select('topic','线索方向',[['','全部方向'],...Object.entries(topics)]);
-   select('stage','处理状态',[['priority','优先补读'],['sample','限量抽查'],['direction','已归类线索'],['filtered','已筛除'],['pending','优先补读及抽查'],['official','官方 JD 已核实'],['card_evidence','卡片有职责或条件'],['formal_review','正式招聘线索'],['blocked','实际读取受阻'],['partial','已有正文片段'],...Object.entries(stages),['group_images','群图片缺口'],['sources','来源同步缺口']]);
+   select('stage','处理状态',[['priority','优先补读'],['sample','限量抽查'],['direction','已归类线索'],['filtered','已筛除'],['pending','优先补读及抽查'],['body','正文待补及抽查'],['official','官方 JD 已核实'],['card_evidence','卡片有职责或条件'],['formal_review','正式招聘线索'],['blocked','实际读取受阻'],['partial','已有正文片段'],...Object.entries(stages),['group_images','群图片缺口'],['sources','来源同步缺口']]);
    select('account','公众号',[['','全部公众号']]);
    const box=el('label','rq-search','搜索标题或已读片段');s.input=el('input');s.input.type='search';s.input.placeholder='产品、投研、实习汇总…';s.input.value=s.query;s.input.oninput=()=>setFilter(s,'query',s.input.value);box.append(s.input);s.controls.append(box);
    const reset=el('button','','重置');reset.onclick=()=>{Object.assign(s,{period:'week',stage:'priority',topic:'',account:'',query:'',page:0});s.input.value='';render(s);save(s);};s.controls.append(reset);
@@ -255,7 +255,7 @@ window.ReadingQueue = (() => {
   s.updated.textContent=`处理截至 ${time(q.updated_at)} · 京沪、明确远程及地点待确认`;
   s.ledgerTitle.textContent=`原文覆盖 · 近七天 ${q.remaining??'—'} 篇未读全`;
   renderCapacity(s.capacity,q.capacity,q,s);
-   renderBatchHelp(s);
+  renderBatchHelp(s);
   s.digest.replaceChildren();
   const evidence=candidates.filter(a=>unread(a)&&!filtered(a)&&a.card_evidence);
   const focus=candidates.filter(priority),images=focus.filter(a=>a.stage==='images').length,quick=candidates.filter(direction);
