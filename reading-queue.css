@@ -36,6 +36,11 @@
 .rq-clue h3{font-size:14px;line-height:1.5;margin:3px 0;color:var(--text)}
 .rq-clue h3 a{color:inherit;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
 .rq-clue h3 a:hover{color:var(--accent);text-decoration-color:var(--accent)}
+.rq-job-sources{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 7px;min-width:0;margin:5px 0 8px;font-size:12px;line-height:1.5}
+.rq-source-label{color:var(--muted);font-weight:600}
+.rq-source-chip{max-width:100%;padding:3px 7px;border-radius:5px;background:var(--soft);color:var(--accent);font-weight:600;overflow-wrap:anywhere}
+.rq-source-more{color:var(--muted)}
+.rq-clue .rq-job-sources{margin:4px 0}
 .rq-clue-label{display:flex;align-items:baseline;flex-wrap:wrap;gap:2px 9px;font-size:12px;font-weight:600;color:var(--accent)}
 .rq-clue-controls{display:grid;grid-template-columns:1fr 1fr 2fr;gap:8px;margin-top:8px}
 .rq-clue-controls label{font-size:12px;color:var(--muted);min-width:0}

@@ -3,6 +3,34 @@
 window.ReadingQueue = (() => {
  const el=(tag,cls,value)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(value!=null)n.textContent=value;return n;};
  const time=v=>v&&Number.isFinite(Date.parse(v))?new Date(v).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}):'暂无记录';
+ function sourceLabel(source,catalog){
+  const name=source.name||'',kind=source.kind||'',url=source.url||'';
+  const local=location.port==='18936'&&['127.0.0.1','localhost','[::1]'].includes(location.hostname);
+  const group=catalog?.groups?.find(g=>g.name===name||(source.id&&g.id===source.id));
+  if(group||kind.startsWith('群')||source.read_status==='group_text'){
+   const groupName=group?.name||name;
+   return local&&groupName?'微信群 · '+groupName:'招聘微信群';
+  }
+  const isArticle=/^https?:\/\/mp\.weixin\.qq\.com\//i.test(url);
+  const account=kind.startsWith('公众号')||catalog?.accounts?.some(a=>a.name===name);
+  let label='来源待核实';
+  if(account)label='公众号';
+  else if(kind.startsWith('机构官方招聘'))label='官方招聘';
+  else if(kind==='学校就业网')label=kind;
+  else if(isArticle)label='微信文章';
+  else if(url||name)label='第三方转载';
+  const showName=local||account||(url&&!isArticle)||label==='官方招聘'||label==='学校就业网';
+  return showName&&name&&name!==label?label+' · '+name:label;
+ }
+ function sourceRow(sources,catalog){
+  const row=el('div','rq-job-sources');
+  const labels=[...new Set(sources.map(source=>sourceLabel(source,catalog)))];
+  row.append(el('span','rq-source-label','来源'));
+  for(const label of labels.slice(0,2))row.append(el('span','rq-source-chip',label));
+  if(!labels.length)row.append(el('span','rq-source-chip','来源待核实'));
+  if(labels.length>2)row.append(el('span','rq-source-more',`另 ${labels.length-2} 个来源`));
+  return row;
+ }
  const topics={finance:'金融线索',product:'产品线索',roundup:'混合汇总',other:'方向待判'};
  const stages={queued:'排队等读取',verification:'实际触发验证',parse:'正文解析失败',images:'文章图片待补',complete:'已读全',location_skipped:'明确异地已跳过'};
  const unread=a=>a.stage!=='complete'&&a.stage!=='location_skipped';
@@ -35,7 +63,7 @@ window.ReadingQueue = (() => {
  }
  const cluePools={core:'核心投研',quant:'交易量化',primary:'一级投行',adjacent:'战略咨询及相邻',unassigned:'细分待确认'};
  const clueStates=new WeakMap();
- function mountClues(jobs,queue,topic,known=[]){
+ function mountClues(jobs,queue,topic,known=[],catalog){
   if(!jobs||!queue)return;
   let s=clueStates.get(jobs);
   if(s?.queue===queue&&s?.known===known)return;
@@ -74,7 +102,7 @@ window.ReadingQueue = (() => {
     s.limit+=12;renderClues(s);s.list.children[prior]?.querySelector('a')?.focus({preventScroll:true});
    };
   }
-  Object.assign(s,{queue,known,topic});
+  Object.assign(s,{queue,known,topic,catalog});
   const localJobs=new Set(known.map(j=>j.id));
   const visible=a=>unread(a)&&!filtered(a)&&a.role_clue?.topic===topic&&![
    a.card_evidence,...(a.read_priority==='clue'?a.official_matches||[]:[]),
@@ -114,7 +142,7 @@ window.ReadingQueue = (() => {
    if(a.url)title.append(originalLink(a,clue.heading||a.title));else title.textContent=clue.heading||a.title;
    const evidence=[clue.cities.join(' / ')||'地点待核',clue.basis==='card'?'卡片线索':'标题线索',time(a.seen_at)];
    if(others.length)evidence.push(`${others.length+1} 条相同预览`);
-   card.append(label,title,el('p','rq-muted',evidence.join(' · ')));
+    card.append(label,title,sourceRow([{name:a.account,url:a.url}],s.catalog),el('p','rq-muted',evidence.join(' · ')));
    s.list.append(card);
   }
   s.result.textContent=s.expanded?(groups.length?`显示 ${Math.min(groups.length,limit)} / ${groups.length} 条线索`:'没有符合筛选的线索。'):'';
@@ -399,5 +427,5 @@ window.ReadingQueue = (() => {
   for(const d of c.daily||[])detail.append(el('p','',`${d.date}：新发现 ${d.discovered} / 首次读全 ${d.completed}`));
   detail.append(el('p','rq-muted','72 个日历小时内至少 60 个小时有真实样本，连续三日读全不落后新增且总积压下降，才认定追上；未满足时不估算清空日期。'));root.append(detail);
  }
- return {mount,mountClues,show,decisions,decisionReady,decisionToday,decisionNew,decisionOpen,decisionMissing,weekQueue,weekPriority:q=>weekQueue(q)?.priority};
+ return {mount,mountClues,show,decisions,decisionReady,decisionToday,decisionNew,decisionOpen,decisionMissing,weekQueue,weekPriority:q=>weekQueue(q)?.priority,sourceLabel,sourceRow};
 })();
