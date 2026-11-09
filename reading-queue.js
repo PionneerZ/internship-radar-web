@@ -7,12 +7,12 @@ window.ReadingQueue = (() => {
   const name=source.name||'',kind=source.kind||'',url=source.url||'';
   const local=location.port==='18936'&&['127.0.0.1','localhost','[::1]'].includes(location.hostname);
   const group=catalog?.groups?.find(g=>g.name===name||(source.id&&g.id===source.id));
-  if(group||kind.startsWith('群')||source.read_status==='group_text'){
+  if(group||source.wechat_kind==='group'||kind.startsWith('群')||source.read_status==='group_text'||name==='招聘微信群'){
    const groupName=group?.name||name;
-   return local&&groupName?'微信群 · '+groupName:'招聘微信群';
+   return local&&groupName&&groupName!=='招聘微信群'?'微信群 · '+groupName:'招聘微信群';
   }
   const isArticle=/^https?:\/\/mp\.weixin\.qq\.com\//i.test(url);
-  const account=kind.startsWith('公众号')||catalog?.accounts?.some(a=>a.name===name);
+  const account=source.wechat_kind==='followed_account'||kind.startsWith('公众号')||catalog?.accounts?.some(a=>a.name===name);
   let label='来源待核实';
   if(account)label='公众号';
   else if(kind.startsWith('机构官方招聘'))label='官方招聘';
