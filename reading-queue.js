@@ -123,7 +123,7 @@ window.ReadingQueue = (() => {
   s.toggle.setAttribute('aria-expanded',String(s.expanded));
   s.toggle.textContent=s.expanded?'收起线索':`查看全部 · ${s.week.length+s.history.length} 条`;
   s.controls.hidden=!s.expanded;
-  s.status.textContent=`近七天 ${s.week.length} 条 · 按标题或卡片归类，投递与条件待核`;
+  s.status.textContent=`近七天 ${s.week.length} 条 · 按标题或卡片归类，岗位资料待核`;
   if(!s.expanded&&!s.week.length)s.status.textContent='近七天暂无新线索，可展开查看历史。';
   const needle=s.expanded?s.search.value.trim().toLocaleLowerCase():'';
   const pool=s.expanded?s.pool.value:'';
@@ -155,21 +155,26 @@ window.ReadingQueue = (() => {
  }
  const lanes={messages:['群消息',300],body:['微信正文',60],offline:['本机缓存与群文件',300],article_images:['文章图片',300],group_images:['群图片',1800],public_sources:['已登记招聘网站',1800],weread:['微信读书实测',60]};
  const chinaDate=value=>new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai'}).format(value);
+ function decisionCandidate(j){
+  return j.bucket!=='明显不符'&&j.category!=='lead'&&j.decision?.opening!=='closed'&&
+    !j.decision?.missing?.some(key=>key==='direction'||key==='location');
+ }
  function decisionReady(j){
-  if(j.decision)return j.decision.ready===true;
-  return j.bucket!=='明显不符'&&!j.excluded_reason&&!j.bank_gate&&j.category!=='lead'&&
-    !['已过期','明确关闭'].includes(j.opening_status)&&Boolean(j.original&&(j.application_url||j.email||j.emails?.length));
+  return decisionCandidate(j)&&j.decision?.information_ready===true;
+ }
+ function decisionNeedsInformation(j){
+  return decisionCandidate(j)&&decisionMissing(j).length>0;
  }
  function decisionNew(j){
   const at=Date.parse(j.decision?.first_ready_at||'');
-  return decisionReady(j)&&Number.isFinite(at)&&chinaDate(at)===chinaDate(Date.now());
+  return decisionCandidate(j)&&j.decision?.ready===true&&Number.isFinite(at)&&chinaDate(at)===chinaDate(Date.now());
  }
  function decisionOpen(j){
-  return j.decision?.opening==='open'&&decisionReady(j);
+  return decisionCandidate(j)&&j.decision?.opening==='open';
  }
- const missingFields={company:'机构',role:'具体岗位',duties:'工作职责',requirements:'任职条件',application:'投递方式',location:'地点',direction:'方向'};
+ const missingFields={company:'机构',role:'具体岗位',duties:'工作职责',requirements:'任职条件',location:'地点'};
  function decisionMissing(j){
-  return (j.decision?.missing||[]).filter(key=>!['direction','location'].includes(key)).map(key=>missingFields[key]).filter(Boolean);
+  return (j.decision?.information_missing||[]).map(key=>missingFields[key]).filter(Boolean);
  }
  function decisionToday(j){
   if(!decisionReady(j))return false;
@@ -184,16 +189,16 @@ window.ReadingQueue = (() => {
   const backlog=weekQueue(queue);
   const missing=(images||[]).filter(x=>!x.verified_copy).length;
   const gaps=missing+(queue?.source_gaps?.length||0);
-  const wanted=jobs.filter(j=>!j.excluded_reason&&!j.bank_gate&&j.decision?.opening!=='closed');
+  const wanted=jobs.filter(decisionNeedsInformation);
   const needs={};
   for(const j of wanted)for(const label of decisionMissing(j))needs[label]=(needs[label]||0)+1;
   const top=Object.entries(needs).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([label,count])=>`${label} ${count}`).join(' · ');
   const entries=[
-   ['new_ready','今日新增可判断',jobs.some(j=>j.decision)?jobs.filter(decisionNew).length:'—','首次补齐岗位和投递证据'],
+   ['ready','岗位资料齐备',jobs.some(j=>j.decision?.information_missing)?jobs.filter(decisionReady).length:'—','机构、岗位、地点、职责、任职条件'],
+   ['information_gaps','岗位资料待补',jobs.some(j=>j.decision?.information_missing)?wanted.length:'—',top||'查看岗位仍缺的资料'],
    ['open','已确认开放',jobs.some(j=>j.decision)?jobs.filter(decisionOpen).length:'—','官方页面确认仍开放的岗位'],
-   ['ready','可直接判断',jobs.filter(decisionReady).length,'可看 JD 和投递方式，仍需核对条件'],
    ['pending','近七天补读队列',backlog?.total??'—',backlog?`优先补读 ${backlog.priority} · 限量抽查 ${backlog.sample}`:'补读清单暂不可用'],
-   ['gaps','还缺什么',queue?.local_login?1:queue?gaps:'—',queue?.local_login?'一次登录恢复微信读书':top||'查看原图和同步缺口'],
+   ['gaps','来源与原图缺口',queue?gaps:'—','查看原图和同步缺口'],
   ];
   const active=document.activeElement?.dataset.decision;
   root.replaceChildren();
@@ -427,5 +432,5 @@ window.ReadingQueue = (() => {
   for(const d of c.daily||[])detail.append(el('p','',`${d.date}：新发现 ${d.discovered} / 首次读全 ${d.completed}`));
   detail.append(el('p','rq-muted','72 个日历小时内至少 60 个小时有真实样本，连续三日读全不落后新增且总积压下降，才认定追上；未满足时不估算清空日期。'));root.append(detail);
  }
- return {mount,mountClues,show,decisions,decisionReady,decisionToday,decisionNew,decisionOpen,decisionMissing,weekQueue,weekPriority:q=>weekQueue(q)?.priority,sourceLabel,sourceRow};
+ return {mount,mountClues,show,decisions,decisionReady,decisionNeedsInformation,decisionToday,decisionNew,decisionOpen,decisionMissing,weekQueue,weekPriority:q=>weekQueue(q)?.priority,sourceLabel,sourceRow};
 })();
