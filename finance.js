@@ -11,7 +11,7 @@ function link(label,url){const a=el('a','',label);if(url&&(/^https?:\/\//.test(u
 function table(target,headers,rows){const wrap=el('div','tablewrap');wrap.tabIndex=0;wrap.setAttribute('role','region');wrap.setAttribute('aria-label',headers.join(' / '));const t=el('table'),head=el('tr'),body=el('tbody');headers.forEach(x=>head.append(el('th','',x)));const thead=el('thead');thead.append(head);t.append(thead,body);rows.forEach(r=>{const tr=el('tr');r.forEach(v=>{const td=el('td');if(v instanceof Node)td.append(v);else td.textContent=unknown(v);tr.append(td)});body.append(tr)});wrap.append(t);target.replaceChildren(wrap)}
 function toast(text,undo){clearTimeout(toastTimer);($('job-detail').open?$('job-detail'):document.body).append($('toast'));$('toast').replaceChildren(el('span','',text));if(undo){const b=el('button','','撤销');b.onclick=()=>{undo();$('toast').hidden=true};$('toast').append(b)}$('toast').hidden=false;toastTimer=setTimeout(()=>$('toast').hidden=true,6000)}
 function syncURL(){const p=new URLSearchParams();if(pool!=='core')p.set('pool',pool);if(view!=='jobs')p.set('view',view);for(const id of fields){const v=$(id).value;if(v&&v!==({period:'week',sort:'direction'}[id]||''))p.set(id,v)}if(activeJob)p.set('job',activeJob);history.replaceState(null,'',location.pathname+(p.size?'?'+p:''))}
-function setView(next){view=['jobs','unread','coverage','profile','acceptance'].includes(next)?next:'jobs';for(const x of ['jobs','unread','coverage','profile','acceptance'])$(x).hidden=x!==view;$('reading-entry').hidden=view==='unread';$('decision-entry').hidden=view==='unread';document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===view));syncURL()}
+function setView(next){view=['jobs','unread','coverage','profile','acceptance'].includes(next)?next:'jobs';for(const x of ['jobs','unread','coverage','profile','acceptance'])$(x).hidden=x!==view;if($('personal-picks'))$('personal-picks').hidden=view!=='jobs';$('reading-entry').hidden=view==='unread';$('decision-entry').hidden=view==='unread';document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===view));syncURL()}
 function option(id,value,label=value){const o=el('option','',label);o.value=value;$(id).append(o)}
 function recent(j){if(j.outside_current_scan)return false;if(j.published_at)return j.published_at>=DATA.window_start.slice(0,10);const t=j.forwarded_at||j.article_published_at;return Boolean(t&&t>=DATA.window_start)}
 function closing(j){if(!j.deadline)return false;const d=(Date.parse(j.deadline+'T23:59:59')-Date.now())/86400000;return d>=0&&d<=7}
@@ -24,12 +24,12 @@ function card(j){const c=el('article','card');c.dataset.id=j.id;const top=el('di
  const bottom=el('div','card-bottom'),tags=el('div','signals');if(j.is_new)tags.append(el('span','new-dot','新发现'));if(closing(j))tags.append(el('span','deadline','截止 '+j.deadline));if(j.changes.length)tags.append(el('span','deadline','JD 有变化'));tags.append(el('span','muted',!j.published_at?'首发未知':j.published_at),el('span','muted',j.opening_status));const acts=el('div','cardactions');acts.append(feedbackButton(j,'saved','收藏'));const detail=el('button','primary','看岗位 →');detail.onclick=()=>showDetail(j);acts.append(detail);bottom.append(tags,acts);c.append(bottom);return c}
 const pickWeek=7*86400000;
 const pickDuties=/^(?:岗位职责|职责描述|工作职责|工作内容|实习内容|职位描述|岗位描述|Responsibilities)\s*[】\]:：]?\s*/i;
-const pickRequirements=/^(?:任职资格|任职要求|岗位要求|应聘要求|招聘要求|职位要求|实习要求|基本要求|Qualifications|Requirements)\s*[】\]:：]?\s*/i;
-const pickSectionEnd=/^(?:应聘方式|报名方式|投递方式|投递说明|简历投递|工作地点|实习地点|实习待遇|岗位福利|实习补贴|你将获得|联系方式|Application)\s*[】\]:：]?\s*/i;
+const pickRequirements=/^(?:任职资格|任职要求|岗位要求|应聘要求|招聘要求|职位要求|实习要求|基本要求|招聘条件|任职条件|Qualifications|Requirements)\s*[】\]:：]?\s*/i;
+const pickSectionEnd=/^(?:应聘方式|申请方式|报名方式|投递方式|投递说明|简历投递|工作地点|实习地点|工作时间|实习待遇|岗位福利|实习补贴|你将获得|公司介绍|联系方式|Application)\s*[】\]:：]?\s*/i;
 const researchWork=[
  ['研究报告',/(?:撰写|完成|产出|输出|形成)[^。；\n]{0,22}(?:报告|研报|研究材料)/],
  ['模型与估值',/(?:搭建|建立|构建|开发|维护|更新)[^。；\n]{0,18}(?:模型|因子)|财务预测|估值分析|策略回测|绩效归因/],
- ['行业或公司研究',/(?:行业|产业|公司|个股|信用|宏观|利率|债券|策略|投资价值)(?:跟踪|研究|分析)|研究[^。；\n]{0,12}(?:行业|产业|公司|个股|市场)/],
+ ['行业或公司研究',/(?:行业|产业|公司|个股|信用|宏观|利率|债券|策略|投资价值)(?:跟踪|研究|分析)|(?:行业|产业|宏观|公司)[^。；\n]{0,22}专题研究/],
  ['组合与资产配置',/资产配置|组合(?:研究|构建|优化|分析)|基金研究|基金评价|多资产研究/],
  ['项目尽调',/尽职调查|尽调访谈|投资尽调|项目尽调|管理层访谈/]
 ];
@@ -45,6 +45,13 @@ const institutionEvidence=[
   label:'2024 年报 · 研究团队与行业覆盖',url:'https://www.cicc.com/upload/file/2025/04/01/ccb3aeab-9739-4169-aaa0-1d890bba7148.pdf'},
  {company:'兴证全球基金',applies:j=>j.family==='配置与基金',
   label:'2025 三季报 · 多资产 FOF',url:'https://www.xqfunds.com/data/20251027164455jjpz.pdf'}
+];
+const pickOverlap=[
+ [/消费.*研究/,/消费品|消费行业|家电|零售|餐饮|食品饮料|纺服|美妆|快消/],
+ [/资产配置/,/资产配置|多[元]?资产|组合(?:研究|构建|优化)|基金评价|FOF/i],
+ [/债券|信用|固收/,/债券|信用研究|发行人|固收|固定收益/],
+ [/并购/,/并购|收购|M&A/i],
+ [/期权|波动率/,/期权|波动率/],
 ];
 let personalPicksState;
 
@@ -66,7 +73,7 @@ function pickSections(j){
 }
 
 function pickTime(value){
- if(!value)return NaN;
+ if(typeof value!=='string'||!value)return NaN;
  if(/^\d{4}-\d{2}-\d{2}$/.test(value))return Date.parse(value+'T23:59:59+08:00');
  const iso=value.replace(' ','T');
  return Date.parse(/T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(iso)?iso+'+08:00':iso);
@@ -81,41 +88,62 @@ function pickDeadline(j){
 }
 
 function pickFullTimeRequirement(requirements){
- return requirements.some(line=>line.split(/[；;。]/).some(clause=>{
-  const years=clause.match(/(?:至少\s*)?(?:[2-9]\d*|[二两三四五六七八九十])\s*年(?:以上|及以上)?[^，,；;。]{0,18}(?:经验|经历)(?:者\s*)?/);
+ return requirements.some(line=>line.normalize('NFKC').split(/[；;。]/).some(clause=>{
+  const years=clause.match(/(?:^|[^\d])(?:至少\s*)?(?:[2-9]|\d{2,}|[二两三四五六七八九十])\s*年(?:以上|及以上)?[^，,；;。]{0,18}(?:经验|经历)(?:者\s*)?/);
   return years&&/(?:工作|全职|行业|互联网|产品|从业|研发|分析师|投研)/.test(years[0])&&!/(?:优先|加分|为佳|更佳)/.test(clause.slice(years.index+years[0].length));
  }));
 }
 
+function pickGate(j,requirements,remoteOnly){
+ const trim=line=>line.replace(/^\s*(?:[-•]|[0-9]+[、.)．])\s*/,'').replace(/[；;。]+$/,'');
+ const cohort=[j.cohort,...requirements].filter(Boolean)
+  .map(line=>line.normalize('NFKC').match(/(?:限|面向)?20\d{2}\s*(?:[–—~-]\s*(?:20)?\d{2}\s*)?(?:届|年毕业)/)?.[0]).find(Boolean);
+ const availability=requirements.map(trim).find(line=>/(?:每周|每星期|实习期|到岗|连续实习)\s*[^。\n]{0,28}(?:[天日]|个月)/.test(line));
+ const schedule=availability?.replace(/^.*?[,，]\s*(?=(?:能|可)?(?:每周|每星期|实习期|连续实习))/,'')||
+  [j.days,j.months].filter(Boolean).join(' · ');
+ const skill=requirements.map(trim).find(line=>/\b(?:SQL|Python|Axure|Figma|Wind)\b|C\+\+|AI\s*工具|估值模型|财务模型|中英文读写/i.test(line));
+ const gate=[cohort,remoteOnly?'远程安排待确认':null,schedule||skill].filter(Boolean).join(' · ');
+ return gate||'任职条件见原文';
+}
+
 function pickCandidate(j,snapshot,profile,lane,now){
- if(!ReadingQueue.decisionReady(j)||pickDeadline(j)<now)return null;
- const official=j.official_verified||j.sources?.some(s=>s.original_verified);
+ if(!j.company||!j.title||!ReadingQueue.decisionReady(j)||pickDeadline(j)<now)return null;
+ if(feedback[j.id]?.ignored||feedback[j.id]?.applied)return null;
+ const officialSource=j.sources?.find(s=>s.original_verified);
+ const official=j.official_verified||officialSource;
  const open=j.decision.opening==='open'&&official&&pickTime(j.last_verified_at)>=now-pickWeek;
  const seen=pickTime(j.published_at||j.forwarded_at||j.article_published_at||j.first_seen_at||j.first_discovered_at);
  if(!open&&(!Number.isFinite(seen)||seen<now-pickWeek||j.outside_current_scan))return null;
- const places=j.cities||j.city?.split(/[、/，,]/)||[];
- const cities=places.map(p=>p.trim()).filter(p=>profile.internship_cities.some(city=>p===city||p===city+'市'));
- if(!cities.length&&!/^(?:支持|可|完全|全程)?远程/.test(j.remote_arrangement||j.city||''))return null;
+ const places=(j.cities||j.city?.split(/[、/，,]/)||[]).map(p=>p.trim());
+ const cities=places.filter(p=>profile.internship_cities.some(city=>p===city||p===city+'市'));
+ const remoteText=[j.title,j.remote_arrangement].filter(Boolean).join('\n');
+ const remoteWork=/(?:可|支持|接受|全程|允许)(?:短期)?远程(?!面试|笔试|面谈|测评|沟通)|远程(?:实习|办公|工作)/.test(remoteText);
+ const remoteOnly=!cities.length&&profile.remote!==false&&(remoteWork||places.includes('远程')&&!/远程(?:面试|笔试|面谈|测评)/.test(remoteText));
+ if(!cities.length&&!remoteOnly)return null;
  const isProduct=lane==='product';
- const title=j.title||'';
- if(isProduct&&(!/产品(?:经理|策划|实习|助理|设计)|(?:产品经理|产品策划)\s*(?:实习)?|Product (?:Manager|Intern)/i.test(title)||
-    /产品运营(?:实习|助理|专员)|(?:市场营销|渠道销售|内容运营|销售)(?:岗|助理|经理|实习|专员)/.test(title)))return null;
- if(!isProduct&&(feedback[j.id]?.ignored||feedback[j.id]?.applied||j.matching?.eligibility?.state==='冲突'||
+ const title=j.title;
+ if(isProduct&&(!/产品(?:经理|策划|实习|助理|设计)|Product (?:Manager|Intern)/i.test(title)||
+    /硬件产品|产品运营(?:实习|助理|专员)|(?:市场营销|渠道销售|内容运营|销售)(?:岗|助理|经理|实习|专员)/.test(title)))return null;
+ if(!isProduct&&(j.matching?.eligibility?.state==='冲突'||
     j.matching?.eligibility?.conditions?.some(c=>c.state==='冲突')||(j.bank_gate&&profile.bank_specialist!==true)))return null;
  const {duties,requirements}=pickSections(j);
  if(pickFullTimeRequirement(requirements))return null;
  const work=(isProduct?productWork:researchWork).filter(([,pattern])=>duties.some(line=>pattern.test(line))).map(([label])=>label);
  if(!work.length||(isProduct&&!work.some(label=>label!=='数据与实验')))return null;
  const evidenceScope=[title,...duties].join('\n');
- const fit=[...new Set((j.matching?.competitiveness?.evidence||[]).filter(e=>e.quote&&evidenceScope.includes(e.quote)).map(e=>e.experience))];
+ const confirmed=[...(profile.experience||[]),...(profile.projects||[])];
+ const fit=[...new Set((j.matching?.competitiveness?.evidence||[])
+  .filter(e=>e.quote&&evidenceScope.includes(e.quote)&&confirmed.includes(e.experience)).map(e=>e.experience))];
+ const direct=fit.filter(exp=>pickOverlap.some(([experience,role])=>experience.test(exp)&&role.test(evidenceScope)));
+ const transferable=fit.filter(exp=>!direct.includes(exp)&&/(?:行业研究|尽调)/.test(exp));
  const institution=institutionEvidence.find(e=>e.company===j.company&&e.applies(j));
- const availability=requirements.find(line=>/(?:每周|每星期|每星期|实习期|到岗|连续实习)\s*[^。\n]{0,28}(?:[天日]|个月)/.test(line));
- const skill=requirements.find(line=>/\b(?:SQL|C\+\+|Python|Axure|Figma)\b|估值模型|财务模型|中英文读写/i.test(line)&&!line.includes('@'));
- const gate=(availability||[j.days,j.months].filter(Boolean).join(' · ')||skill||'查看任职条件').replace(/^\s*(?:[-•]|[0-9]+[、.)．])\s*/,'');
- return {j,isProduct,open:Boolean(open),where:cities.join(' / ')||'远程',work,fit,institution,gate,
-         source:isProduct?{kind:j.source_kind,name:j.source_name,url:j.url}:j.sources?.[0],
-         rank:[Math.min(work.length,2),Number(open),Number(Boolean(institution)),Math.min(fit.length,2),work.length,Number(Boolean(j.team)),Number(Boolean(official)),seen||0],
-         snapshot};
+ const cohortUnknown=j.matching?.eligibility?.conditions?.some(c=>c.name==='毕业届别'&&c.quote&&c.state==='未知');
+ const source=isProduct?{kind:j.source_kind,name:j.source_name,url:j.url}:officialSource||j.sources?.[0];
+ const origin=source?ReadingQueue.sourceLabel(source.name===title?{...source,name:''}:source,snapshot):'来源待核实';
+ return {j,isProduct,open:Boolean(open),where:cities.join(' / ')||'远程',work,direct,transferable,institution,
+         gate:pickGate(j,requirements,remoteOnly),origin,
+         rank:[Math.min(work.length,2),Number(open),direct.length,Number(Boolean(institution)),Number(!cohortUnknown),
+               Math.min(transferable.length,2),work.length,Number(Boolean(j.team)),Number(Boolean(official)),seen||0]};
 }
 
 function rankPersonalPicks(data,product,now=Date.now()){
@@ -127,7 +155,7 @@ function rankPersonalPicks(data,product,now=Date.now()){
   {key:'product',title:'产品备选',limit:2,jobs:product?.jobs||[]}
  ];
  for(const lane of lanes){
-  const candidates=lane.jobs.map(j=>pickCandidate(j,lane.key==='product'?product:data,profile,lane.key,now)).filter(Boolean);
+  const candidates=lane.jobs.map(j=>pickCandidate(j,product,profile,lane.key,now)).filter(Boolean);
   candidates.sort((a,b)=>{
    for(let i=0;i<a.rank.length;i++)if(a.rank[i]!==b.rank[i])return b.rank[i]-a.rank[i];
    return a.j.id.localeCompare(b.j.id);
@@ -145,7 +173,7 @@ function rankPersonalPicks(data,product,now=Date.now()){
 }
 
 function personalPickCard(pick){
- const {j,isProduct,open,where,work,fit,institution,gate,source,snapshot}=pick;
+ const {j,isProduct,open,where,work,direct,transferable,institution,gate,origin}=pick;
  const article=el('article','personal-pick');
  const top=el('div','pick-top');
  top.append(el('strong','pick-company',[j.company,j.team].filter(Boolean).join(' / ')),el('span','badge '+(open?'positive':'warning'),open?'已核实开放':'开放待核'));
@@ -155,11 +183,11 @@ function personalPickCard(pick){
   if(e.button||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
   e.preventDefault();showDetail(j);
  };
- const origin=source?ReadingQueue.sourceLabel(source,isProduct?snapshot:PRODUCT):'来源待核实';
  article.append(top,title,el('p','pick-meta',where+' · '+origin),
   el('p','pick-work',work.slice(0,3).join(' · ')),
-  el('p','pick-gate','先核对 '+(gate.length>80?gate.slice(0,79)+'…':gate)));
- if(fit.length)article.append(el('p','pick-fit','可用经历 '+fit.slice(0,2).join('、')));
+  el('p','pick-gate','先核对 '+(gate.length>84?gate.slice(0,83)+'…':gate)));
+ if(direct.length)article.append(el('p','pick-fit','相近经历 '+direct.slice(0,2).join('、')));
+ else if(transferable.length)article.append(el('p','pick-fit','方法可迁移 '+transferable.slice(0,2).join('、')));
  if(institution){
   const fact=link(institution.label,institution.url);
   fact.className='pick-evidence';
@@ -170,24 +198,37 @@ function personalPickCard(pick){
 
 function renderPersonalPicks(){
  const local=location.protocol==='http:'&&location.port==='18936'&&['127.0.0.1','localhost','[::1]'].includes(location.hostname);
- const profile=DATA.profile;
- if(!local||window.RadarPublication||!profile?.education?.length||!profile.priorities?.length||!profile.internship_cities?.length)return;
+ const profile=DATA?.profile;
+ if(!local||window.RadarPublication||!profile?.education?.length||!profile.priorities?.length||!profile.internship_cities?.length){
+  $('personal-picks')?.remove();
+  personalPicksState=null;
+  return;
+ }
  const now=Date.now();
  const dismissed=JSON.stringify(Object.entries(feedback).filter(([,v])=>v?.applied||v?.ignored).map(([id])=>id).sort());
  if(personalPicksState?.data===DATA&&personalPicksState.product===PRODUCT&&personalPicksState.dismissed===dismissed&&now-personalPicksState.at<60000)return;
- personalPicksState={data:DATA,product:PRODUCT,dismissed,at:now};
+ const lanes=rankPersonalPicks(DATA,PRODUCT,now);
+ const signature=JSON.stringify(lanes.map(lane=>lane.picks.map(({j,institution,rank,...pick})=>
+  [j.id,j.company,j.team,j.title,institution?.url,pick])));
+ if(personalPicksState?.signature===signature){
+  personalPicksState={data:DATA,product:PRODUCT,dismissed,at:now,signature};
+  return;
+ }
  let panel=$('personal-picks');
+ if(panel?.contains(document.activeElement))return;
+ personalPicksState={data:DATA,product:PRODUCT,dismissed,at:now,signature};
  if(!panel){
   panel=el('section','personal-picks');
   panel.id='personal-picks';
   panel.setAttribute('aria-labelledby','personal-picks-title');
-  $('jobs').prepend(panel);
+  panel.hidden=view!=='jobs';
+  $('decision-entry').before(panel);
  }
  const heading=el('div','picks-heading'),name=el('h2','','优先看');
  name.id='personal-picks-title';
  heading.append(name,el('p','','按新岗位资料自动更新 · 最多 5 条'));
  const list=el('div','picks-lanes');
- for(const lane of rankPersonalPicks(DATA,PRODUCT,now)){
+ for(const lane of lanes){
   const group=el('div','picks-lane');
   group.append(el('h3','',lane.title));
   if(lane.picks.length)group.append(...lane.picks.map(personalPickCard));
@@ -248,4 +289,4 @@ function renderInformation(){
 }
 
 $('open-unread').onclick=()=>setView('unread');
-let checkingBackground=false;setInterval(async()=>{if(document.hidden||updating||checkingBackground)return;checkingBackground=true;try{const r=await fetch('./data/status.json',{cache:'no-store'});if(r.ok){const status=await r.json();renderRuntime(status);const published=status.published_at||status.finished_at;if(published&&(!DATA||Date.parse(published)>Date.parse(DATA.generated_at)))await load();}}catch{}finally{checkingBackground=false}},60000);
+let checkingBackground=false;setInterval(async()=>{if(document.hidden||updating||checkingBackground)return;checkingBackground=true;try{const r=await fetch('./data/status.json',{cache:'no-store'});if(r.ok){const status=await r.json();renderRuntime(status);const published=status.published_at||status.finished_at;if(published&&(!DATA||Date.parse(published)>Date.parse(DATA.generated_at)))await load();}}catch{}finally{renderPersonalPicks();checkingBackground=false}},60000);
