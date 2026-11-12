@@ -90,7 +90,8 @@ function pickDeadline(j){
 function pickFullTimeRequirement(requirements){
  return requirements.some(line=>line.normalize('NFKC').split(/[；;。]/).some(clause=>{
   const years=clause.match(/(?:^|[^\d])(?:至少\s*)?(?:[2-9]|\d{2,}|[二两三四五六七八九十])\s*年(?:以上|及以上)?[^，,；;。]{0,18}(?:经验|经历)(?:者\s*)?/);
-  return years&&/(?:工作|全职|行业|互联网|产品|从业|研发|分析师|投研)/.test(years[0])&&!/(?:优先|加分|为佳|更佳)/.test(clause.slice(years.index+years[0].length));
+  return years&&/(?:工作|全职|行业|互联网|产品|从业|研发|分析师|投研)/.test(years[0])&&
+   !/^(?:者|的)?\s*(?:优先|加分|为佳|更佳)/.test(clause.slice(years.index+years[0].length));
  }));
 }
 
@@ -98,9 +99,9 @@ function pickGate(j,requirements,remoteOnly){
  const trim=line=>line.replace(/^\s*(?:[-•]|[0-9]+[、.)．])\s*/,'').replace(/[；;。]+$/,'');
  const cohort=[j.cohort,...requirements].filter(Boolean)
   .map(line=>line.normalize('NFKC').match(/(?:限|面向)?20\d{2}\s*(?:[–—~-]\s*(?:20)?\d{2}\s*)?(?:届|年毕业)/)?.[0]).find(Boolean);
- const availability=requirements.map(trim).find(line=>/(?:每周|每星期|实习期|到岗|连续实习)\s*[^。\n]{0,28}(?:[天日]|个月)/.test(line));
- const schedule=availability?.replace(/^.*?[,，]\s*(?=(?:能|可)?(?:每周|每星期|实习期|连续实习))/,'')||
-  [j.days,j.months].filter(Boolean).join(' · ');
+ const timePattern=/(?:每周|每星期|实习期|到岗|连续实习)\s*[^。\n]{0,28}(?:[天日]|个月)/;
+ const availability=requirements.map(trim).find(line=>timePattern.test(line));
+ const schedule=availability?.slice(availability.search(timePattern))||[j.days,j.months].filter(Boolean).join(' · ');
  const skill=requirements.map(trim).find(line=>/\b(?:SQL|Python|Axure|Figma|Wind)\b|C\+\+|AI\s*工具|估值模型|财务模型|中英文读写/i.test(line));
  const gate=[cohort,remoteOnly?'远程安排待确认':null,schedule||skill].filter(Boolean).join(' · ');
  return gate||'任职条件见原文';
@@ -118,7 +119,9 @@ function pickCandidate(j,snapshot,profile,lane,now){
  const cities=places.filter(p=>profile.internship_cities.some(city=>p===city||p===city+'市'));
  const remoteText=[j.title,j.remote_arrangement].filter(Boolean).join('\n');
  const remoteWork=/(?:可|支持|接受|全程|允许)(?:短期)?远程(?!面试|笔试|面谈|测评|沟通)|远程(?:实习|办公|工作)/.test(remoteText);
- const remoteOnly=!cities.length&&profile.remote!==false&&(remoteWork||places.includes('远程')&&!/远程(?:面试|笔试|面谈|测评)/.test(remoteText));
+ const remoteDenied=/(?:不支持|不接受|不能|不可|不允许|谢绝)(?:安排)?远程(?!面试|笔试|面谈|测评)/.test(remoteText);
+ const remoteOnly=!cities.length&&profile.remote!==false&&!remoteDenied&&
+  (remoteWork||places.includes('远程')&&!/远程(?:面试|笔试|面谈|测评)/.test(remoteText));
  if(!cities.length&&!remoteOnly)return null;
  const isProduct=lane==='product';
  const title=j.title;
@@ -181,7 +184,7 @@ function personalPickCard(pick){
  title.className='pick-title';
  if(!isProduct)title.onclick=e=>{
   if(e.button||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
-  e.preventDefault();showDetail(j);
+  e.preventDefault();showDetail(DATA?.jobs.find(job=>job.id===j.id)||j);
  };
  article.append(top,title,el('p','pick-meta',where+' · '+origin),
   el('p','pick-work',work.slice(0,3).join(' · ')),
@@ -289,4 +292,4 @@ function renderInformation(){
 }
 
 $('open-unread').onclick=()=>setView('unread');
-let checkingBackground=false;setInterval(async()=>{if(document.hidden||updating||checkingBackground)return;checkingBackground=true;try{const r=await fetch('./data/status.json',{cache:'no-store'});if(r.ok){const status=await r.json();renderRuntime(status);const published=status.published_at||status.finished_at;if(published&&(!DATA||Date.parse(published)>Date.parse(DATA.generated_at)))await load();}}catch{}finally{renderPersonalPicks();checkingBackground=false}},60000);
+let checkingBackground=false;setInterval(async()=>{if(document.hidden||updating||checkingBackground)return;checkingBackground=true;try{const r=await fetch('./data/status.json',{cache:'no-store'});if(r.ok){const status=await r.json();renderRuntime(status);const published=status.published_at||status.finished_at;if(published&&(!DATA||Date.parse(published)>Date.parse(DATA.generated_at)))await load();}}catch{}finally{checkingBackground=false;renderPersonalPicks()}},60000);
