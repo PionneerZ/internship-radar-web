@@ -144,7 +144,7 @@ function careerReturn(j,data,company,opening,analysisLines,ownsOutput,mainlySupp
   j.pool==='quant'?'策略研究 / 交易研究':j.pool==='primary'?
   (/承销|股权投行|并购|财务顾问/.test(j.family||'')?'投行 / 并购与融资':'一级投资 / 行业与项目判断'):
   '商业分析 / 咨询备选';
- return {backup,pathway,evidence:valuable?evidence:null,route,
+  return {backup,pathway,evidence:valuable?evidence:null,route,decisionWork:Boolean(valuable&&quote),
   depth:valuable?(quote||ownsOutput?2:1):0,
   compensation:careerPay(j,opening,multipleRoles)};
 }
@@ -395,14 +395,19 @@ function financeAssessment(j,data,now){
   skills:unprovenSkill?[...new Set([technical,english].filter(Boolean))]:[],conflicts,route,due};
 }
 
-function compareFinance(a,b){
-  return b.choice.level-a.choice.level||Number(a.career.backup)-Number(b.career.backup)||
-   Number(b.opening.open)-Number(a.opening.open)||Number(b.opening.current)-Number(a.opening.current)||
-   Number(b.career.pathway.rank===2)-Number(a.career.pathway.rank===2)||
-   b.route-a.route||b.career.depth-a.career.depth||
+function compareCareerValue(a,b){
+ return Number(b.career.pathway.rank===2)-Number(a.career.pathway.rank===2)||
+   Number(a.career.pathway.rank===-1)-Number(b.career.pathway.rank===-1)||
+   b.career.depth-a.career.depth||Number(b.career.decisionWork)-Number(a.career.decisionWork)||
+   b.route-a.route||
    Number(Boolean(b.direct.length))-Number(Boolean(a.direct.length))||
-  Number(a.choice.label==='值得冲刺')-Number(b.choice.label==='值得冲刺')||
-  Number(Boolean(b.transferable.length))-Number(Boolean(a.transferable.length))||
+   Number(Boolean(b.transferable.length))-Number(Boolean(a.transferable.length));
+}
+
+function compareFinance(a,b){
+ return b.choice.level-a.choice.level||Number(a.career.backup)-Number(b.career.backup)||
+   Number(b.opening.open)-Number(a.opening.open)||Number(b.opening.current)-Number(a.opening.current)||
+   compareCareerValue(a,b)||Number(a.choice.label==='值得冲刺')-Number(b.choice.label==='值得冲刺')||
   b.due-a.due||
    b.career.pathway.rank-a.career.pathway.rank||Number(Boolean(b.mentoring))-Number(Boolean(a.mentoring))||
   (b.opening.seen||0)-(a.opening.seen||0)||a.j.id.localeCompare(b.j.id);
@@ -460,23 +465,43 @@ function priorityWork(a){
 const financeChoices=['优先评估','先核开放','值得冲刺','先核条件','备选','待核专业岗','资料待补','明显不符','已截止','已关闭或过期'];
 const decisionFocus=new Set(['ready','information_gaps','new_ready','open','today']);
 
+function shortlistRepostKey(a){
+ const {j}=a, compact=value=>(value||'').normalize('NFKC').toLowerCase().replace(/[\s\p{P}]/gu,'');
+ const employer=compact(a.company),cities=(j.cities||[]).map(city=>compact(city).replace(/市$/,'')).sort();
+ const quote=compact(a.career.evidence);
+ if(!employer||employer==='未知'||!cities.length||quote.length<18||a.opening.official)return null;
+ const heading=j.title.normalize('NFKC').replace(/^(?:实习招聘|招聘)\s*[丨|:·-]\s*/,'')
+  .replace(/(?:【([^】]+)】|\[([^\]]+)\]|\(([^)]+)\))$/, (match,a,b,c)=>cities.includes(compact(a||b||c).replace(/市$/,''))?'':match);
+ const normalized=compact(heading);
+ const role=normalized.startsWith(employer)?normalized.slice(employer.length).replace(/^招聘/,''):normalized;
+ if(!role)return null;
+ const team=compact(a.namedTeam);
+ return JSON.stringify([employer,role,role.includes(team)?'':team,cities,compact(j.cohort),compact(j.internship_type),quote]);
+}
+
 function renderCareerShortlist(target,assessment,scoped){
  const candidates=scoped.map(j=>assessment.get(j.id)).filter(a=>a.choice.level>=3&&
-  a.opening.current&&!a.career.backup&&a.career.depth&&!feedback[a.j.id]?.applied).sort(compareFinance);
+   a.opening.current&&!a.career.backup&&a.career.depth&&!feedback[a.j.id]?.applied)
+   .sort((a,b)=>compareCareerValue(a,b)||compareFinance(a,b));
+ const shown=new Set();
  const groups=[
   ['先看 · 已核开放',candidates.filter(a=>a.opening.open&&a.choice.level===5),'当前没有同时满足岗位价值和开放核验的机会。'],
   ['值得跟 · 待核状态或条件',candidates.filter(a=>!a.opening.open||a.choice.level<5),'当前没有达到跟进标准的待核岗位。']
  ].map(([label,rows,empty])=>{
-  const employers=new Map();
-  const shortlist=rows.filter(a=>{
+   const employers=new Map(), shortlist=[];
+   for(const a of rows){
    const count=employers.get(a.company)||0;
-   if(count===2)return false;
+    const key=shortlistRepostKey(a);
+    if(count===2||(key&&shown.has(key)))continue;
+    if(key)shown.add(key);
    employers.set(a.company,count+1);
-   return true;
-  }).slice(0,3);
+    shortlist.push(a);
+    if(shortlist.length===3)break;
+   }
   return [label,shortlist,empty];
  });
- const signature=JSON.stringify(groups.map(([,rows])=>rows.map(a=>[a.j.id,a.j.title,a.company,a.place.where,a.career.evidence,priorityNext(a),a.career.pathway.text])));
+  const signature=JSON.stringify(groups.map(([,rows])=>rows.map(a=>[a.j.id,a.j.title,a.company,a.place.where,a.career.evidence,priorityNext(a),a.career.pathway.text,
+   (a.j.sources||[]).map(source=>ReadingQueue.sourceLabel(source,PRODUCT))])));
  if(target.dataset.signature===signature)return;
  target.dataset.signature=signature;
  target.replaceChildren(...groups.map(([label,rows,empty])=>{
@@ -488,7 +513,7 @@ function renderCareerShortlist(target,assessment,scoped){
    title.dataset.careerJob=a.j.id;
    title.onclick=()=>showDetail(a.j);
    const proof=a.career.evidence.replace(/\s+/g,' ');
-   entry.append(el('p','career-employer',[a.company,a.place.where].filter(Boolean).join(' · ')),title,
+    entry.append(el('p','career-employer',[a.company,a.place.where].filter(Boolean).join(' · ')),title,ReadingQueue.sourceRow(a.j.sources||[],PRODUCT),
     el('p','career-duty',proof.slice(0,85)+(proof.length>85?'…':'')),
     el('p','career-check',priorityNext(a)||'核对 JD 中的出勤和到岗要求'),
     ...(a.career.pathway.rank!==0?[el('p','career-check',a.career.pathway.text)]:[]));
@@ -505,7 +530,7 @@ function renderPriorityPanel(assessment,scoped){
   panel=el('section','personal-picks');
   panel.id='personal-picks';
   panel.setAttribute('aria-label','评估优先级筛选');
-   panel.append(el('div','priority-summary'),el('div','career-shortlist'),el('div','priority-filters'));
+   panel.append(el('div','priority-summary'),el('p','career-pay-note'),el('div','career-shortlist'),el('div','priority-filters'));
   const filters=panel.lastElementChild;
   for(const state of ['',...financeChoices]){
    const b=el('button','priority-filter');
@@ -528,6 +553,10 @@ function renderPriorityPanel(assessment,scoped){
  if(pool!=='all')summary.push(DATA.pools[pool]);
  if($('period').value!=='all')summary.push($('period').selectedOptions[0].text);
  panel.querySelector('.priority-summary').textContent=summary.join(' · ');
+  const payCount=scoped.filter(j=>assessment.get(j.id).career.compensation.quote).length;
+  panel.querySelector('.career-pay-note').textContent=payCount?
+   payCount+' 条官方 JD 披露了同团队、同届的正式岗固定薪酬；在岗位详情查看原句。':
+   '暂无可核对的同团队、同届正式岗薪酬。先按招聘通道和实际工作排。';
   renderCareerShortlist(panel.querySelector('.career-shortlist'),assessment,scoped);
  for(const button of panel.querySelectorAll('[data-priority-filter]')){
   const key=button.dataset.priorityFilter,count=key?(counts.get(key)||0):scoped.length;
