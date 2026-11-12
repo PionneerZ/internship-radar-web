@@ -47,7 +47,7 @@ const preferredCondition=/优先|加分|为佳|更佳|不限|优先考虑|prefer
 const cohortCondition=/(?:20\d{2}(?:\s*(?:至|[—–~/-])\s*(?:20)?\d{2})?\s*(?:届|年毕业)|次年毕业|毕业时间|毕业届别)/;
 const pickAttendance=/(?:每周|每星期|一周)[^。；;\n]{0,22}(?:[0-7一二三四五六七]\s*(?:天|日))|全勤/;
 const pickDuration=/(?:\d+(?:\s*[-至~—]\s*\d+)?|[一二三四五六七八九十]+)\s*个\s*月|(?:实习(?:期|时长)?|至少|不少于|连续|持续)\s*(?:\d+|[一二三四五六七八九十]+)\s*月(?!份|[0-9日])/;
-const pickStart=/(?:立即|尽快|近期|下周|本周|尽早)\s*(?:到岗|入职)|(?:到岗|入职)时间|(?:到岗|入职)[^。；;\n]{0,18}\d+月/;
+const pickStart=/(?:可|能)?\s*(?:立即|尽快|近期|下周|本周|尽早)\s*(?:到岗|入职)(?:者?\s*优先)?|(?:到岗|入职)(?:日期|时间)?\s*[:：]?\s*(?:20\d{2}[-/年])?\d{1,2}(?:[-/]\d{1,2}|月(?:\d{1,2}日?)?)(?:前|起)?/;
 const pickListPrefix=/^\s*(?:[-•·]\s*|\(?\s*[0-9]+\s*[、.)．，,]\s*)/;
 const dutyAction=/^(?:(?:在|由)[^，,。；]{1,28}(?:指导|带领)下\s*[，,]?\s*)?(?:协助|负责|参与|开展|进行|完成|支持|撰写|搭建|分析|研究|开发|维护|跟踪|收集|编制|整理|了解|Assist\b|Conduct\b|Support\b|Develop\b)/i;
 const productWork=[
@@ -224,7 +224,7 @@ function financeSchedule(j,clauses){
  const available=[
   parts.find(part=>pickAttendance.test(part))||j.days,
   parts.find(part=>pickDuration.test(part))||j.months,
-  parts.find(part=>pickStart.test(part))||j.start,
+  [...parts,j.start].map(part=>part?.match(pickStart)?.[0].trim()).find(Boolean),
  ];
  const [attendance,duration,start]=available;
  const unknown=!attendance&&!duration?'出勤与时长待核':!attendance?'出勤待核':!duration?'实习时长待核':'';

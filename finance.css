@@ -15,7 +15,7 @@
 .picks-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 14px;margin-bottom:12px}
 .picks-heading h2{margin:0;font-size:21px}
 .picks-heading p{margin:0;color:var(--muted);font-size:12px}
-.picks-lanes{display:grid;grid-template-columns:minmax(0,1.18fr) minmax(0,.91fr) minmax(0,1fr);gap:12px}
+.picks-lanes{display:grid;grid-template-columns:minmax(0,1.16fr) repeat(2,minmax(0,.94fr)) minmax(0,1fr);gap:12px}
 .picks-lane{min-width:0}
 .picks-lane h3{margin:0 0 8px;color:var(--accent);font-size:13px}
 .personal-pick{
@@ -57,6 +57,9 @@
 .priority-row p:last-child{margin-bottom:0}
 .priority-lead{font-weight:650}
 .priority-row blockquote{margin:7px 0 0;padding:3px 10px;line-height:1.65}
+@media(max-width:1100px){
+  .picks-lanes{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 @media(max-width:800px){
   .personal-picks{padding:12px}
   .picks-lanes{grid-template-columns:minmax(0,1fr)}
