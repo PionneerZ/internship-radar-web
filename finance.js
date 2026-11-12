@@ -11,7 +11,7 @@ function link(label,url){const a=el('a','',label);if(url&&(/^https?:\/\//.test(u
 function table(target,headers,rows){const wrap=el('div','tablewrap');wrap.tabIndex=0;wrap.setAttribute('role','region');wrap.setAttribute('aria-label',headers.join(' / '));const t=el('table'),head=el('tr'),body=el('tbody');headers.forEach(x=>head.append(el('th','',x)));const thead=el('thead');thead.append(head);t.append(thead,body);rows.forEach(r=>{const tr=el('tr');r.forEach(v=>{const td=el('td');if(v instanceof Node)td.append(v);else td.textContent=unknown(v);tr.append(td)});body.append(tr)});wrap.append(t);target.replaceChildren(wrap)}
 function toast(text,undo){clearTimeout(toastTimer);($('job-detail').open?$('job-detail'):document.body).append($('toast'));$('toast').replaceChildren(el('span','',text));if(undo){const b=el('button','','撤销');b.onclick=()=>{undo();$('toast').hidden=true};$('toast').append(b)}$('toast').hidden=false;toastTimer=setTimeout(()=>$('toast').hidden=true,6000)}
 function defaultSort(){return priorityOwner()?'priority':'direction'}
-function defaultPool(){return priorityOwner()?'all':'core'}
+function defaultPool(){return 'all'}
 function defaultPeriod(){return priorityOwner()?'all':'week'}
 function syncURL(){const p=new URLSearchParams();if(pool&&pool!==defaultPool())p.set('pool',pool);if(view!=='jobs')p.set('view',view);for(const id of fields){const v=$(id).value;if(v&&v!==({period:defaultPeriod(),sort:defaultSort()}[id]||''))p.set(id,v)}if(activeJob)p.set('job',activeJob);history.replaceState(null,'',location.pathname+(p.size?'?'+p:''))}
 function setView(next){view=['jobs','unread','coverage','profile','acceptance'].includes(next)?next:'jobs';for(const x of ['jobs','unread','coverage','profile','acceptance'])$(x).hidden=x!==view;$('reading-entry').hidden=view==='unread';$('decision-entry').hidden=view==='unread';document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===view));syncURL()}
@@ -36,7 +36,7 @@ function card(j,assessment){const c=el('article','card');c.dataset.id=j.id;const
  const bottom=el('div','card-bottom'),tags=el('div','signals');if(j.is_new)tags.append(el('span','new-dot','新发现'));if(closing(j))tags.append(el('span','deadline','截止 '+j.deadline));if(j.changes.length)tags.append(el('span','deadline','JD 有变化'));tags.append(el('span','muted',!j.published_at?'首发未知':j.published_at),el('span','muted',assessment?priorityOpening(assessment):j.opening_status));const acts=el('div','cardactions');acts.append(feedbackButton(j,'saved','收藏'));const detail=el('button','primary','看岗位 →');detail.onclick=()=>showDetail(j);acts.append(detail);bottom.append(tags,acts);c.append(bottom);return c}
 const pickWeek=7*86400000;
 const pickDuties=/^(?:岗位主要职责|岗位职责|职责描述|工作职责|工作内容|实习内容|实习职责|职位职责|主要职责|主要工作(?:内容)?|工作任务|职位描述|岗位描述|Responsibilities|Job Description)(?=$|[\s】\]:：])\s*[】\]:：]?\s*/i;
-const pickRequirements=/^(?:任职资格|任职要求|岗位要求|应聘要求|招聘要求|职位要求|实习要求|基本要求|招聘条件|任职条件|Qualifications|Requirements)(?=$|[\s】\]:：])\s*[】\]:：]?\s*/i;
+const pickRequirements=/^(?:任职资格|任职要求|岗位要求|应聘要求|招聘要求|职位要求|实习要求|基本要求|工作要求|资格要求|招聘条件|任职条件|Qualifications|Requirements|Successful Applicants?)(?=$|[\s】\]:：])\s*[】\]:：]?\s*/i;
 const pickAvailability=/^(?:工作时间|实习时间|实习时长|实习周期|实习期限|到岗要求|毕业届别|出勤要求)(?=$|[\s】\]:：])\s*[】\]:：]?\s*[:：]?\s*/;
 const pickSectionEnd=/^(?:应聘方式|申请方式|报名方式|投递方式|投递说明|简历投递|工作地点|实习地点|实习待遇|实习收获|岗位福利|实习补贴|你将获得|我们能提供|我们提供|福利待遇|公司介绍|公司简介|联系方式|Application|申请)(?=$|[\s】\]:：])/i;
 const financeOutputs=[
@@ -51,9 +51,9 @@ const financeResearch=[
  ['宏观与信用',/(?:宏观(?:经济)?|利率|债券|固收|信用|转债|发债主体|发行主体|发行人|商品产业链)[^。；\n]{0,10}(?:研究|分析)|开展[^。；\n]{0,30}(?:发债主体|发行人)[^。；\n]{0,8}(?:研究|分析)/],
  ['尽调与投资判断',/尽职调查|(?:投资|项目|主体|信用)尽调|尽调访谈|管理层访谈|可行性分析|投资(?:机会|标的)(?:筛选|评估)|挖掘投资机会|投资判断/]
 ];
-const financeSupport=/清算|对账|划款|(?:档案|材料|资料)归档|报送|排版|(?:设备|业务)台账|会议安排|路演安排|系统维护|行政(?:事务|支持)|拉新|开户|销户|获客|销售指标|渠道维护|客户开发|审批流程|准入材料|推介材料|产品介绍材料|业务准入|运营支持|文件用印|其他[^。；\n]{0,16}支持工作|日常运维/;
+const financeSupport=/清算|对账|划款|(?:档案|材料|资料)归档|报送|排版|PPT\s*美化|(?:设备|业务)台账|会议安排|路演安排|系统维护|行政(?:事务|支持)|拉新|开户|销户|获客|销售指标|渠道维护|客户开发|审批流程|准入材料|推介材料|产品介绍材料|业务准入|运营支持|文件用印|其他[^。；\n]{0,16}支持工作|日常运维/i;
 const financeSales=/机构销售|销售实习|渠道销售|财富顾问|理财顾问|开户拉新|销售指标|客户开发|开发客户|销售转化|产品销售|销售产品/;
-const financeExecution=/簿记建档|债券承销|申报材料|发行材料|发行执行|(?:项目)?发行阶段|交易执行|交易指令|下单|询价配售|项目执行|融资流程|交易要素整理|交易数据统计/;
+const financeExecution=/簿记建档|债券承销|申报材料|发行材料|发行执行|(?:项目)?发行阶段|交易执行|交易指令|下单|询价配售|项目执行|项目投标|项目建议书制作|募集说明书撰写|工作底稿整理|融资流程|交易要素整理|交易数据统计/;
 const technicalGate=/(?:熟练|精通|掌握|擅长|具备|必须|要求|熟悉)[^。；\n]{0,40}(?:\b(?:Python|SQL|R|MATLAB|Linux|Wind|Bloomberg)\b|C\+\+|彭博|机器学习|深度学习|高频|随机过程|复杂定价|量化(?:策略|研究)经验|(?:财务|估值|定价|风险|金融)模型)|(?:已有|曾有|曾在|必须有|至少)[^。；\n]{0,32}(?:投研|并购|量化|投行|行业)[^。；\n]{0,14}(?:实习|经验|经历)/i;
 const preferredCondition=/优先|加分|为佳|更佳|不限|优先考虑|preferred|a plus/i;
 const cohortCondition=/(?:20\d{2}(?:\s*(?:至|[—–~/-])\s*(?:20)?\d{2})?\s*(?:届|年(?:\s*(?:及|或)\s*(?:以[后前]|之后|之前))?\s*毕业)|次年毕业|毕业时间|毕业届别)/;
@@ -126,7 +126,7 @@ const bankingWork=/财务建模|财务模型|估值(?:分析|建模)|估值模�
 function careerPathway(j,opening,multipleRoles){
  const raw=(j.conversion_quote||'').trim();
  const source=j.sources?.[0]; // The primary source owns original and conversion_quote.
- const currentOfficial=!multipleRoles&&opening.open&&source?.original_verified&&source.url;
+ const currentOfficial=!multipleRoles&&opening.open&&opening.internship&&source?.original_verified&&source.url;
  const quotes=[...new Set([raw,...(j.original||'').split(/\r?\n/)].flatMap(s=>s.split(/[。；;]/))
   .map(s=>s.trim()).filter(Boolean))];
  if(!multipleRoles){
@@ -143,7 +143,7 @@ function careerPathway(j,opening,multipleRoles){
 
 function careerPay(j,opening,multipleRoles){
  const source=j.sources?.[0];
- const comparable=!multipleRoles&&opening.open&&source?.original_verified&&source.url&&j.team&&j.cohort&&j.cities?.length===1;
+ const comparable=!multipleRoles&&opening.open&&opening.internship&&source?.original_verified&&source.url&&j.team&&j.cohort&&j.cities?.length===1;
  const quote=comparable&&(j.original||'').split(/\r?\n/).map(line=>line.trim().normalize('NFKC'))
   .find(line=>formalPayLine.test(line));
  return quote?{text:'本岗位公告载明正式岗固定薪酬；实发奖金待核',quote,url:source.url}:
@@ -292,7 +292,7 @@ const englishGate=/(?:英语|中?英文)[^。；]{0,9}(?:流利|熟练|读写|�
 const specialistEnglish=/(?:工作语言|雅思|托福|IELTS|TOEFL|流利|TEM-?8|专八)/i;
 
 function dutyLines(duties){
- return duties.flatMap(line=>line.split(/[。；;]|(?<=\s)[（(]?\d{1,2}[、.）)](?=\s*[^\d])|[、，,](?=\s*(?:发债主体|发行主体|发行人)(?:研究|分析)|\s*(?:项目|现场)?尽职调查)/))
+ return duties.flatMap(line=>line.split(/[。；;]|(?<=\s)[（(]?\d{1,2}[、.）)](?=\s*[^\d])|[、，,]\s*(?:包括但不限于\s*)?(?=(?:发债主体|发行主体|发行人)(?:研究|分析)|(?:项目|现场)?尽职调查|项目投标|项目建议书制作|募集说明书撰写|申报材料制作|工作底稿整理)/))
   .map(line=>line.trim().replace(pickListPrefix,'').replace(/^[（(]\d+[）)]\s*/,'')
    .split(/[，,](?=\s*(?:有机会|视(?:个人)?能力|视表现|表现(?:优异|优秀|良好|合格)|后续可|如果表现))/)[0])
   .filter(line=>line&&!contingentWork.test(line)&&!dutyRequirement.test(line));
@@ -363,9 +363,11 @@ function financeAssessment(j,data,now){
   sales?'销售职责':execution.length?'交易执行与材料':support.length?'流程与运营支持':'职责待核';
  const fit=financeFit(j,data.profile,work);
  const direct=fit.filter(x=>x.level==='直接相关'),transferable=fit.filter(x=>x.level==='方法可迁移');
-  const company=toEmployer(j.company);
-  const institution=institutionEvidence.find(e=>e.company===company&&e.applies(j)&&
-   pickTime(e.asOf)<=now&&now-pickTime(e.asOf)<=550*86400000);
+ const company=toEmployer(j.company);
+ const institution=institutionEvidence.find(e=>{
+  const asOf=pickTime(e.asOf+'T00:00:00+08:00');
+  return e.company===company&&e.applies(j)&&asOf<=now&&now-asOf<=550*86400000;
+ });
  const opening=pickOpening(j,now),place=pickLocation(j,data.profile,requirements);
  const titleTeam=j.title.match(/研究所\s*[|｜·]?[\s]*([^，,。()（）]{1,16}(?:团队|小组))/)?.[1];
  const namedTeam=titleTeam||(!/水晶球|新财富/.test(j.team||'')?j.team:null);
@@ -421,6 +423,7 @@ function compareCareerValue(a,b){
  return Number(b.career.pathway.rank===2)-Number(a.career.pathway.rank===2)||
    Number(a.career.pathway.rank===-1)-Number(b.career.pathway.rank===-1)||
    b.career.depth-a.career.depth||Number(b.career.decisionWork)-Number(a.career.decisionWork)||
+    Number(Boolean(b.institution))-Number(Boolean(a.institution))||
    Number(Boolean(b.direct.length))-Number(Boolean(a.direct.length))||
    Number(Boolean(b.transferable.length))-Number(Boolean(a.transferable.length));
 }
