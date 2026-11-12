@@ -14,7 +14,7 @@ function defaultSort(){return priorityOwner()?'priority':'direction'}
 function defaultPool(){return priorityOwner()?'all':'core'}
 function defaultPeriod(){return priorityOwner()?'all':'week'}
 function syncURL(){const p=new URLSearchParams();if(pool&&pool!==defaultPool())p.set('pool',pool);if(view!=='jobs')p.set('view',view);for(const id of fields){const v=$(id).value;if(v&&v!==({period:defaultPeriod(),sort:defaultSort()}[id]||''))p.set(id,v)}if(activeJob)p.set('job',activeJob);history.replaceState(null,'',location.pathname+(p.size?'?'+p:''))}
-function setView(next){view=['jobs','unread','coverage','profile','acceptance'].includes(next)?next:'jobs';for(const x of ['jobs','unread','coverage','profile','acceptance'])$(x).hidden=x!==view;if($('personal-picks'))$('personal-picks').hidden=view!=='jobs';$('reading-entry').hidden=view==='unread';$('decision-entry').hidden=view==='unread';document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===view));syncURL()}
+function setView(next){view=['jobs','unread','coverage','profile','acceptance'].includes(next)?next:'jobs';for(const x of ['jobs','unread','coverage','profile','acceptance'])$(x).hidden=x!==view;$('reading-entry').hidden=view==='unread';$('decision-entry').hidden=view==='unread';document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===view));syncURL()}
 function option(id,value,label=value){const o=el('option','',label);o.value=value;$(id).append(o)}
 function inPeriod(j,period){
  if(period==='all')return true;
@@ -27,7 +27,10 @@ function feedbackAction(j,key){const before=!!feedback[j.id]?.[key];feedback[j.i
 function feedbackButton(j,key,label){const b=el('button','feedback',feedback[j.id]?.[key]?({saved:'已收藏',ignored:'恢复显示',applied:'已投递 ✓'}[key]):label);b.setAttribute('aria-pressed',!!feedback[j.id]?.[key]);b.onclick=()=>feedbackAction(j,key);return b}
 function compactReason(j){return j.why.replace(/\s+/g,' ').trim()}
 function barrier(j){const conflicts=j.matching.eligibility.conditions.filter(x=>x.state==='冲突');if(conflicts.length)return conflicts.map(x=>x.name+'：'+x.reason).join('；');return j.confirm.length?'待确认 '+j.confirm.slice(0,3).join('、')+(j.confirm.length>3?'等 '+j.confirm.length+' 项':''):'暂无已知硬条件冲突'}
-function card(j,assessment){const c=el('article','card');c.dataset.id=j.id;const top=el('div','cardhead'),title=el('div','card-title');title.append(el('div','company',unknown(j.company)+(j.team?' / '+j.team:'')));const open=el('button','job-title',j.title.replace(/[【\[]感兴趣可以私信[】\]]/g,'').trim());open.onclick=()=>showDetail(j);title.append(open);const state=assessment?priorityBadge(assessment):el('span','badge '+(j.bucket==='明显不符'?'conflict':j.bucket==='优先看'?'positive':'warning'),j.bucket);top.append(title,state);c.append(top,ReadingQueue.sourceRow(j.sources,PRODUCT));const meta=el('div','facts');meta.append(el('span','place',assessment?.place.where||j.cities.join(' / ')||'地点未知'),el('span','',assessment?.type||j.family),el('span','',j.internship_type||'类型未知'),el('span','',j.days||'出勤未知'));c.append(meta);
+function companyLabel(j,assessment){
+ return [unknown(assessment?assessment.company:j.company),assessment?assessment.namedTeam:j.team].filter(Boolean).join(' / ');
+}
+function card(j,assessment){const c=el('article','card');c.dataset.id=j.id;const top=el('div','cardhead'),title=el('div','card-title');title.append(el('div','company',companyLabel(j,assessment)));const open=el('button','job-title',j.title.replace(/[【\[]感兴趣可以私信[】\]]/g,'').trim());open.onclick=()=>showDetail(j);title.append(open);const state=assessment?priorityBadge(assessment):el('span','badge '+(j.bucket==='明显不符'?'conflict':j.bucket==='优先看'?'positive':'warning'),j.bucket);top.append(title,state);c.append(top,ReadingQueue.sourceRow(j.sources,PRODUCT));const meta=el('div','facts');meta.append(el('span','place',assessment?.place.where||j.cities.join(' / ')||'地点未知'),el('span','',assessment?.type||j.family),el('span','',j.internship_type||'类型未知'),el('span','',(assessment?assessment.schedule.attendance:j.days)||'出勤未知'));c.append(meta);
  if(assessment)c.dataset.priority=assessment.choice.label;
  const reason=el('div','decision-line');reason.append(el('span','line-label',assessment?'职责':'值得看'),el('p','why',assessment?priorityWork(assessment):compactReason(j)));const gate=el('div','decision-line gate');gate.append(el('span','line-label',assessment?'下一步':'门槛'),el('p','barrier',assessment?priorityNext(assessment):barrier(j)));c.append(reason,gate);const missingProof=ReadingQueue.decisionMissing(j);if(missingProof.length)c.append(el('p','small','还缺 '+missingProof.join('、')));
  const bottom=el('div','card-bottom'),tags=el('div','signals');if(j.is_new)tags.append(el('span','new-dot','新发现'));if(closing(j))tags.append(el('span','deadline','截止 '+j.deadline));if(j.changes.length)tags.append(el('span','deadline','JD 有变化'));tags.append(el('span','muted',!j.published_at?'首发未知':j.published_at),el('span','muted',assessment?priorityOpening(assessment):j.opening_status));const acts=el('div','cardactions');acts.append(feedbackButton(j,'saved','收藏'));const detail=el('button','primary','看岗位 →');detail.onclick=()=>showDetail(j);acts.append(detail);bottom.append(tags,acts);c.append(bottom);return c}
@@ -40,16 +43,17 @@ const financeOutputs=[
  ['研究报告',/(?:撰写|完成|产出|输出|形成|编制)[^。；\n]{0,26}(?:研报|(?:深度|研究|策略|行业|信用|尽调|点评|专题|投资|可行性|新股申购)[^。；\n]{0,8}报告)|(?:研究|策略|信用|尽调|专题)报告(?:的)?(?:撰写|编制)|(?:专题研究|行业研究|尽职调查|行业及公司的研究)[^。；\n]{0,24}(?:报告(?:的)?撰写|(?:撰写|编制)分析报告)|上市公司[^。；\n]{0,16}报告撰写/],
  ['建模与估值',/(?:搭建|建立|构建|开发|优化)[^。；\n]{0,22}(?:预测|估值|定价|风险|财务|金融|量化)[^。；\n]{0,6}模型|(?:财务|估值|定价|风险|量化)模型(?:搭建|开发|构建)|模型(?:搭建|构建)|财务预测|估值(?:分析|建模)|(?:财务|估值|定价)建模/],
  ['组合与基金分析',/(?:分析|研究|构建|优化|拟定|制定)[^。；\n]{0,18}(?:资产配置|投资组合|基金组合|配置方案)|资产配置(?:研究|模型|方案|建议)|组合(?:构建|优化|归因|分析|研究)|基金(?:评价|筛选|研究|绩效归因)|管理人(?:研究|尽调)|绩效归因/],
- ['因子与策略开发',/(?:开发|构建|检验|优化|回测)[^。；\n]{0,20}(?:因子|策略|信号)|策略(?:回测|开发|测试)|因子(?:挖掘|开发|检验)|衍生品定价|波动率曲面/]
+ ['因子与策略开发',/(?:开发|构建|检验|优化|回测)[^。；\n]{0,20}(?:因子|策略|信号)|策略(?:回测|开发|测试)|因子(?:挖掘|开发|检验)|衍生品定价|波动率曲面/],
+ ['战略分析与建议',/(?:商业|战略|经营)(?:决策|分析)[^。；\n]{0,22}(?:决策建议|战略机会|分析结论)|(?:制定|撰写|提出)[^。；\n]{0,20}(?:战略建议|投资建议|投资备忘录)/]
 ];
 const financeResearch=[
  ['行业与基本面',/(?:行业|产业|赛道|公司|个股|上市公司|金融市场|资本市场|二级(?:市场|权益)|商业模式|投资价值|基本面)[^。；\n]{0,9}(?:深度研究|研究|分析)|(?:深入|深度|专题|基本面)研究/],
  ['宏观与信用',/(?:宏观(?:经济)?|利率|债券|固收|信用|转债|发债主体|发行人|商品产业链)[^。；\n]{0,10}(?:研究|分析)|开展[^。；\n]{0,30}(?:发债主体|发行人)[^。；\n]{0,8}(?:研究|分析)/],
  ['尽调与投资判断',/尽职调查|(?:投资|项目|主体|信用)尽调|尽调访谈|管理层访谈|可行性分析|投资(?:机会|标的)(?:筛选|评估)|挖掘投资机会|投资判断/]
 ];
-const financeSupport=/清算|对账|划款|档案归档|材料归档|报送|排版|设备台账|会议安排|路演安排|系统维护|行政事务|拉新|开户|获客|销售指标|渠道维护|客户开发|审批流程|准入材料|推介材料|产品介绍材料|业务准入|运营支持/;
+const financeSupport=/清算|对账|划款|(?:档案|材料|资料)归档|报送|排版|(?:设备|业务)台账|会议安排|路演安排|系统维护|行政(?:事务|支持)|拉新|开户|销户|获客|销售指标|渠道维护|客户开发|审批流程|准入材料|推介材料|产品介绍材料|业务准入|运营支持|文件用印|其他[^。；\n]{0,16}支持工作|日常运维/;
 const financeSales=/机构销售|销售实习|渠道销售|财富顾问|理财顾问|开户拉新|销售指标|客户开发|开发客户|销售转化|产品销售|销售产品/;
-const financeExecution=/簿记建档|债券承销|申报材料|发行材料|发行执行|交易执行|交易指令|下单|询价配售|项目执行|融资流程|交易要素整理|交易数据统计/;
+const financeExecution=/簿记建档|债券承销|申报材料|发行材料|发行执行|(?:项目)?发行阶段|交易执行|交易指令|下单|询价配售|项目执行|融资流程|交易要素整理|交易数据统计/;
 const technicalGate=/(?:熟练|精通|掌握|擅长|具备|必须|要求|熟悉)[^。；\n]{0,40}(?:\b(?:Python|SQL|R|MATLAB|Linux|Wind|Bloomberg)\b|C\+\+|彭博|机器学习|深度学习|高频|随机过程|复杂定价|量化(?:策略|研究)经验|(?:财务|估值|定价|风险|金融)模型)|(?:已有|曾有|曾在|必须有|至少)[^。；\n]{0,32}(?:投研|并购|量化|投行|行业)[^。；\n]{0,14}(?:实习|经验|经历)/i;
 const preferredCondition=/优先|加分|为佳|更佳|不限|优先考虑|preferred|a plus/i;
 const cohortCondition=/(?:20\d{2}(?:\s*(?:至|[—–~/-])\s*(?:20)?\d{2})?\s*(?:届|年(?:\s*(?:及|或)\s*(?:以[后前]|之后|之前))?\s*毕业)|次年毕业|毕业时间|毕业届别)/;
@@ -197,13 +201,15 @@ function priorityOwner(){
 
 const workOwnership=/^(?:在[^，。；]{1,25}(?:带领|指导)下[，,]?\s*)?(?:独立(?:完成|开展|撰写)?|主导|负责|撰写|搭建|构建|开发|编制)/;
 const workAssistance=/^(?:协助|辅助|配合|参与|支持|跟随)/;
-const contingentWork=/^(?:有机会|视能力|视表现|表现(?:优异|优秀|良好|合格)|后续可|如果表现)|有机会(?:参与|独立|撰写)|视个人能力/;
-const teamMentoring=/带教|定期反馈|导师[^，。；]{0,20}(?:指导|培训)|分析师[^，。；]{0,15}指导|一对一(?:指导|培养)/;
-const englishGate=/英语[^。；]{0,8}(?:流利|熟练|读写|工作语言)|(?:熟练|流利)[^。；]{0,14}(?:英语|英文|中英文)|(?:英文|英语)(?:读写|沟通)能力|雅思|托福|IELTS|TOEFL/i;
+const contingentWork=/^(?:有机会|视(?:个人)?能力|视表现|表现(?:优异|优秀|良好|合格)|后续可|如果表现)/;
+const teamMentoring=/带教|定期反馈|(?:导师|mentor)[^，。；]{0,26}(?:指导|培训)|分析师[^，。；]{0,15}指导|一对一(?:指导|培养)/i;
+const englishGate=/(?:英语|中?英文)[^。；]{0,9}(?:流利|熟练|读写|工作语言)|(?:熟练|流利)[^。；]{0,14}(?:英语|英文|中英文)|雅思|托福|IELTS|TOEFL/i;
+const specialistEnglish=/(?:工作语言|雅思|托福|IELTS|TOEFL|流利|TEM-?8|专八)/i;
 
 function dutyLines(duties){
  return duties.flatMap(line=>line.split(/[。；;]|(?<=\s)[（(]?\d{1,2}[、.）)](?=\s*[^\d])/))
-  .map(line=>line.trim().replace(pickListPrefix,'').replace(/^[（(]\d+[）)]\s*/,''))
+  .map(line=>line.trim().replace(pickListPrefix,'').replace(/^[（(]\d+[）)]\s*/,'')
+   .split(/[，,](?=\s*(?:有机会|视(?:个人)?能力|视表现|表现(?:优异|优秀|良好|合格)|后续可|如果表现))/)[0])
   .filter(line=>line&&!contingentWork.test(line));
 }
 
@@ -281,13 +287,15 @@ function financeAssessment(j,data,now){
  const namedTeam=titleTeam||(!/水晶球|新财富/.test(j.team||'')?j.team:null);
  const teamProof=namedTeam?(opening.official?'官方 JD 载明 '+namedTeam:'招聘原帖载明 '+namedTeam):'具体团队待核';
  const mentoring=(j.original||'').split(/\r?\n/).find(line=>teamMentoring.test(line)&&!pickRequirements.test(line));
- const business=Number(Boolean(institution));
+ const business=Number(Boolean(institution))+Number(Boolean(opening.official&&namedTeam));
  const conditions=j.matching?.eligibility?.conditions||[];
  const conflicts=conditions.filter(c=>c.state==='冲突');
  const clauses=requirementClauses(requirements);
  const required=clauses.filter(line=>!preferredCondition.test(line));
  const cohort=required.find(line=>cohortCondition.test(line));
- const skill=required.find(line=>technicalGate.test(line)||englishGate.test(line));
+ const technical=required.find(line=>technicalGate.test(line));
+ const english=required.find(line=>englishGate.test(line));
+ const skill=technical||english;
  const unknownCohort=cohort&&!conditions.some(c=>c.name==='毕业届别'&&c.state==='满足');
  const unprovenSkill=skill&&!conditions.some(c=>c.name==='硬性技能/经历'&&c.state==='满足');
  const missing=new Set(j.decision?.information_missing||[]);
@@ -296,32 +304,39 @@ function financeAssessment(j,data,now){
  const shortCohort=cohort?.match(cohortCondition)?.[0];
  const gap=unprovenSkill?(/\b(?:Python|Linux|MATLAB)\b|C\+\+/i.test(skill)?'编程及相关环境待核':
   /模型|定价|随机过程/.test(skill)?'建模或定价能力待核':englishGate.test(skill)?'JD 英语门槛待核':
-  /Wind|Bloomberg|彭博/i.test(skill)?'Wind／彭博熟练度待核':'JD 要求的专业技能或经历待核'):'';
+  /Bloomberg|彭博/i.test(skill)?'金融终端熟练度待核':/Wind|万德/i.test(skill)?'Wind 熟练度待核':'JD 要求的专业技能或经历待核'):'';
+ const specialist=unprovenSkill&&Boolean(technical||specialistEnglish.test(skill));
+ const multipleRoles=/(?:岗|实习生)\s*[/／、及和]\s*[^。]{2,28}(?:岗|实习生)/.test(j.title)&&
+  /如应聘|岗位[一二三四1-4]|分别招聘/.test(j.original||'');
  const checks=[unknownCohort&&shortCohort+'待核',!place.known&&!place.outside&&'实习地点待核',
-  place.remoteOnly&&data.profile.remote==null&&'远程安排待核',gap,schedule.summary,schedule.unknown].filter(Boolean);
- const fullTime=pickFullTimeRequirement(requirements)||/社会招聘|全职招聘/.test(j.title)&&!/实习/.test(j.title);
+  place.remoteOnly&&data.profile.remote==null&&'远程安排待核',gap,technical&&english&&'JD 英语门槛待核',schedule.summary,schedule.unknown].filter(Boolean);
+ const workExperience=pickFullTimeRequirement(requirements);
+ const fullTime=workExperience||/社会招聘|全职招聘/.test(j.title)&&!/实习/.test(j.title);
  const bankGate=j.bank_gate&&data.profile.bank_specialist!==true;
  const choice=opening.closed?{label:opening.closed,level:0,note:'以 JD 的截止时间或关闭状态为准'}:
   conflicts.length||place.outside||fullTime||j.excluded_reason?{label:'明显不符',level:0,note:conflicts.length?
-   conflicts.map(c=>c.name+' '+c.reason).join('；'):place.outside?'JD 地点超出当前实习范围':fullTime?'原文要求多年工作经历':j.excluded_reason}:
+   conflicts.map(c=>c.name+' '+c.reason).join('；'):place.outside?'JD 地点超出当前实习范围':fullTime?(workExperience?'原文要求多年工作经历':'原文为社会或全职招聘'):j.excluded_reason}:
   bankGate?{label:'待核专业岗',level:2,note:'银行专业岗待确认是否考虑'}:
   !j.company||missing.has('company')||missing.has('role')?{label:'资料待补',level:1,note:'机构或具体岗位待核'}:
-  mainlySupport||depth===1||j.pool==='adjacent'?{label:'备选',level:2,note:mainlySupport?'支持或销售职责较多，核实研究分工':nature}:
+  multipleRoles?{label:'先核条件',level:3,note:'同一原文包含多岗，先核对各岗位职责'}:
   !depth||missing.has('duties')?{label:'资料待补',level:1,note:'JD 中尚无可确认的研究、投资或交易职责'}:
+  mainlySupport||depth===1||j.pool==='adjacent'?{label:'备选',level:2,note:mainlySupport?'支持或销售职责较多，核实研究分工':nature}:
   !place.known||!opening.current||unknownCohort?{label:'先核条件',level:3,note:!opening.current?'旧线索，先核当前招聘状态':!place.known?'实习地点待核':shortCohort+'待核'}:
   missing.has('requirements')||!requirements.length?{label:'先核条件',level:3,note:'JD 未披露可核对的任职要求'}:
-  unprovenSkill?{label:'值得冲刺',level:4,note:gap}:
+  specialist?{label:'值得冲刺',level:5,note:gap}:
   {label:opening.open?'优先评估':'先核开放',level:5,note:opening.open?'':'确认是否仍招'};
  const route={core:3,quant:2,primary:1,adjacent:0}[j.pool]??0;
  const due=Number(opening.open&&opening.deadline>=now&&opening.deadline-now<=3*86400000);
- return {j,choice,type,nature,work,secondary,mixed,depth,fit,direct,transferable,institution,background,teamProof,mentoring,business,
-  opening,place,checks,schedule,cohort:unknownCohort?cohort:null,skill:unprovenSkill?skill:null,conflicts,route,due};
+ return {j,company,namedTeam,choice,type,nature,work,secondary,mixed,depth,fit,direct,transferable,institution,background,teamProof,mentoring,business,
+  opening,place,checks,schedule,cohort:unknownCohort?cohort:null,
+  skills:unprovenSkill?[...new Set([technical,english].filter(Boolean))]:[],conflicts,route,due};
 }
 
 function compareFinance(a,b){
  return b.choice.level-a.choice.level||Number(b.opening.open)-Number(a.opening.open)||
   Number(b.opening.current)-Number(a.opening.current)||b.route-a.route||b.depth-a.depth||
   Number(Boolean(b.direct.length))-Number(Boolean(a.direct.length))||Number(Boolean(b.mentoring))-Number(Boolean(a.mentoring))||b.business-a.business||
+  Number(a.choice.label==='值得冲刺')-Number(b.choice.label==='值得冲刺')||
   Number(Boolean(b.transferable.length))-Number(Boolean(a.transferable.length))||
   b.due-a.due||
   (b.opening.seen||0)-(a.opening.seen||0)||a.j.id.localeCompare(b.j.id);
@@ -533,27 +548,29 @@ function renderFinancePriority(a){
   row.append(el('dt','',label),value);
   rows.append(row);
  };
- const workQuotes=[...new Set(a.work.map(e=>e.quote))].slice(0,2);
+ const workQuotes=[...new Set([workQuote(a),...a.work.map(e=>e.quote)].filter(Boolean))].slice(0,3);
  if(a.mixed&&a.secondary.length)workQuotes.push(a.secondary.find(quote=>!workQuotes.includes(quote))||a.secondary[0]);
  add('路线与职责',el('p','priority-lead',a.type+' · '+a.nature),
   ...[...new Set(workQuotes)].map(quote=>el('blockquote','quote',quote)));
  const business=[el('p','priority-lead',a.teamProof)];
+ if(a.background)business.push(link(a.background.label,a.background.url),el('p','muted',a.background.scope));
  if(a.institution)business.push(link(a.institution.label,a.institution.url),el('p','muted',a.institution.scope));
- business.push(el('p','muted','团队独立排名、长期收入和实际留用待核。'));
+ if(a.mentoring)business.push(el('blockquote','quote',a.mentoring));
+ if(a.j.conversion_quote)business.push(el('blockquote','quote',a.j.conversion_quote));
  add('团队与业务',...business);
  const fits=a.fit.slice(0,2).map(f=>el('p','',f.level+' · '+f.experience+'。'+f.note+'。'));
  add('经历与缺口',...(fits.length?fits:[el('p','muted','已确认经历中暂无直接对应的职责。')]));
  const opening=priorityOpening(a)+(a.opening.open?' · '+date(a.j.last_verified_at):'');
- const quotes=[a.cohort,a.skill,...a.conflicts.map(c=>c.quote),...a.schedule.quotes].filter(Boolean);
+ const quotes=[a.cohort,...a.skills,...a.conflicts.map(c=>c.quote),...a.schedule.quotes].filter(Boolean);
  add('下一步核对',el('p','priority-lead',priorityNext(a)),el('p','muted',opening),
   ...[...new Set(quotes)].map(quote=>el('blockquote','quote',quote)));
  section.append(rows);
  return section;
 }
 
-function showDetail(j,open=true){activeJob=j.id;const d=$('detail-content');d.replaceChildren();const assessment=priorityOwner()?financeAssessments().get(j.id):null;const h=el('div','detail-intro');h.append(el('p','company',unknown(j.company)+(j.team?' / '+j.team:'')),el('h2','',j.title));h.lastChild.id='detail-title';h.append(ReadingQueue.sourceRow(j.sources,PRODUCT),assessment?priorityBadge(assessment):el('span','badge warning',j.bucket));if(!assessment)h.append(el('p','detail-why',j.why),el('p','notice',barrier(j)));d.append(h);if(assessment)d.append(renderFinancePriority(assessment));
+function showDetail(j,open=true){activeJob=j.id;const d=$('detail-content');d.replaceChildren();const assessment=priorityOwner()?financeAssessments().get(j.id):null;const h=el('div','detail-intro');h.append(el('p','company',companyLabel(j,assessment)),el('h2','',j.title));h.lastChild.id='detail-title';h.append(ReadingQueue.sourceRow(j.sources,PRODUCT),assessment?priorityBadge(assessment):el('span','badge warning',j.bucket));if(!assessment)h.append(el('p','detail-why',j.why),el('p','notice',barrier(j)));d.append(h);if(assessment)d.append(renderFinancePriority(assessment));
  const apply=el('div','apply-box');apply.append(el('h3','','投递方式'));if(j.application_url)apply.append(link('打开投递入口 ↗',j.application_url));for(const email of j.emails){const row=el('div','email-row');row.append(el('span','',email));const b=el('button','','复制邮箱');b.onclick=async()=>{try{await navigator.clipboard.writeText(email);b.textContent='已复制 ✓';toast('投递邮箱已复制')}catch{toast('复制失败，请选中邮箱复制')}};row.append(b);apply.append(row)}if(!j.application_url&&!j.emails.length)apply.append(el('p','muted','投递方式尚未取得，请查看原文来源。'));if(j.application_note)apply.append(el('p','hint',j.application_note));const acts=el('div','cardactions');acts.append(feedbackButton(j,'saved','收藏'),feedbackButton(j,'applied','标记已投递'),feedbackButton(j,'ignored','忽略'));apply.append(acts);
- const facts=el('div','facts detail-facts');for(const[k,v]of[['地点',j.cities.join(' / ')],['类型',j.internship_type],['出勤',j.days],['时长',j.months],['补贴',j.pay],['截止',j.deadline],['远程',j.remote_arrangement],['到岗',j.start],['状态',assessment?priorityOpening(assessment):j.opening_status]])fact(facts,k,v);d.append(facts);
+ const facts=el('div','facts detail-facts');for(const[k,v]of[['地点',assessment?assessment.place.where:j.cities.join(' / ')],['类型',j.internship_type],['出勤',assessment?assessment.schedule.attendance:j.days],['时长',assessment?assessment.schedule.duration:j.months],['补贴',j.pay],['截止',j.deadline],['远程',j.remote_arrangement],['到岗',j.start],['状态',assessment?priorityOpening(assessment):j.opening_status]])fact(facts,k,v);d.append(facts);
  const jd=el('details','jd');jd.open=!assessment;jd.append(el('summary','','原始 JD'),el('pre','',j.original));d.append(jd,apply);const grid=el('div','detailgrid'),a=el('div'),b=el('div');a.append(el('h3','','① 职业方向'),el('p','',j.matching.direction.reason),el('div','quote',unknown(j.matching.direction.quote)),el('h3','','② 当前竞争力'));for(const x of j.matching.competitiveness.evidence)a.append(el('p','',x.experience+'：'+x.note),el('div','quote',x.quote));if(!j.matching.competitiveness.evidence.length)a.append(el('p','','尚无明确经历证据。'));a.append(el('h3','','主要缺口'));for(const x of j.matching.competitiveness.gaps)a.append(el('p','',x.mandatory?'要求需补证':'偏好 / 加分，非硬门槛'),el('div','quote',x.quote));if(!j.matching.competitiveness.gaps.length)a.append(el('p','','JD 未提供可进一步核对的技能要求。'));table(b,['条件','状态','JD 原句 / 解释'],j.matching.eligibility.conditions.map(x=>[x.name,x.state,(x.quote||'JD 未写明')+'；'+x.reason]));b.prepend(el('h3','','③ 可投条件'));b.append(el('h3','','④ 机会质量'),el('p','',j.matching.quality.note),el('p','','职责性质：'+j.work_nature),el('div','quote','留用原话：'+unknown(j.conversion_quote)));grid.append(a,b);
  if(assessment){const conditions=el('details');conditions.append(el('summary','','完整匹配条件'),grid);d.append(conditions)}else d.append(grid);
  for(const version of j.repost_versions||[]){
@@ -562,21 +579,97 @@ function showDetail(j,open=true){activeJob=j.id;const d=$('detail-content');d.re
   other.append(el('pre','',version.original));d.append(other);
  }
  const meta=el('details');meta.append(el('summary','','来源与时间'));const dates=el('div','facts');for(const[k,v]of[['JD 首发',j.published_at],['文章发布',j.article_published_at],['转发',j.forwarded_at],['首次发现',j.first_discovered_at],['最后核验',j.last_verified_at]])fact(dates,k,date(v));meta.append(dates);j.sources.forEach(s=>{const label=ReadingQueue.sourceLabel(s,PRODUCT);meta.append(s.url?link(label+' ↗',s.url):el('span','',label),el('p','hint',s.kind+(s.original_verified?' · 官方页面已读，开放状态另核验':' · 原始发布方未独立核验')))});d.append(meta);if(open&&!$('job-detail').open)$('job-detail').showModal();syncURL()}
-function resetFilters(){for(const id of fields)$(id).value=({period:'week',sort:defaultSort()}[id]||'');render()}
-function setupData(){for(const [old,id] of Object.entries(DATA.job_aliases||{})){if(feedback[old]){feedback[id]={...feedback[old],...feedback[id]};try{localStorage.setItem('finance-feedback-v1',JSON.stringify(feedback))}catch{}}}const desired={};for(const id of fields)desired[id]=$(id).value;
+function resetFilters(){pool=defaultPool();for(const id of fields)$(id).value=({period:defaultPeriod(),sort:defaultSort()}[id]||'');render()}
+function setupData(initial=false){
+ for(const [old,id] of Object.entries(DATA.job_aliases||{})){
+  if(!feedback[old])continue;
+  feedback[id]={...feedback[old],...feedback[id]};
+  try{localStorage.setItem('finance-feedback-v1',JSON.stringify(feedback))}catch{}
+ }
+ const first=!pool;
+ pool??=defaultPool();
+ const desired=Object.fromEntries(fields.map(id=>[id,$(id).value]));
+ if(first){desired.period=defaultPeriod();desired.sort=defaultSort()}
  const priorPriority=$('sort').querySelector('[value="priority"]'),owner=priorityOwner();
  if(owner&&!priorPriority){option('sort','priority','评估优先级');$('sort').prepend($('sort').lastElementChild);desired.sort='priority'}
  else if(!owner&&priorPriority){priorPriority.remove();if(desired.sort==='priority')desired.sort='direction'}
  if(owner!==Boolean(priorPriority)){
-  const states=owner?['优先评估','先核开放','值得冲刺','先核条件','资料待补','待核专业岗','备选','明显不符','已截止','已关闭或过期']:
+  const states=owner?financeChoices:
    ['优先看','值得冲刺','待确认条件','备选','明显不符'];
   while($('bucket').options.length>1)$('bucket').remove(1);
   for(const state of states)option('bucket',state);
   if(!states.includes(desired.bucket))desired.bucket='';
  }
- $('pools').replaceChildren();for(const id of ['core','quant','primary','adjacent']){const b=el('button');b.dataset.pool=id;b.setAttribute('aria-pressed',id===pool);b.append(el('span','',DATA.pools[id]),el('span','n',DATA.jobs.filter(j=>j.pool===id).length));b.onclick=()=>{pool=id;$('family').value='';if(decisionFocus.has($('focus').value))$('focus').value='';render()};$('pools').append(b)}for(const id of ['city','type','family'])while($(id).options.length>({city:4,type:1,family:1}[id]))$(id).remove($(id).options.length-1);[...new Set(DATA.jobs.flatMap(j=>j.cities))].sort().filter(c=>!['北京','上海'].includes(c)).forEach(c=>option('city',c));DATA.types.forEach(x=>option('type',x));[...new Set(DATA.role_coverage.map(r=>r.family))].forEach(x=>option('family',x));for(const id of fields)if(desired[id])$(id).value=desired[id];for(const id of ['profile-content','rules','coverage-stats','institution-list','change-list','wechat-coverage'])$(id).replaceChildren();renderInformation();$('stamp').textContent='数据截至 '+date(DATA.generated_at);render()}
+ if(!$('pools').children.length){
+  for(const id of ['all','core','quant','primary','adjacent']){
+   const b=el('button');
+   b.dataset.pool=id;
+   b.append(el('span','',id==='all'?'全部金融':DATA.pools[id]),el('span','n'));
+   b.onclick=()=>{pool=id;$('family').value='';$('bucket').value='';render()};
+   $('pools').append(b);
+  }
+ }
+ for(const id of ['city','type','family'])while($(id).options.length>({city:4,type:1,family:1}[id]))$(id).remove($(id).options.length-1);
+ [...new Set(DATA.jobs.flatMap(j=>j.cities))].sort().filter(c=>!['北京','上海'].includes(c)).forEach(c=>option('city',c));
+ DATA.types.forEach(x=>option('type',x));
+ [...new Set(DATA.role_coverage.map(r=>r.family))].forEach(x=>option('family',x));
+ if(initial){
+  const requestedPool=restoreParams.get('pool');
+  if(requestedPool==='all'||Object.hasOwn(DATA.pools,requestedPool))pool=requestedPool;
+  else if(decisionFocus.has(restoreParams.get('focus')))pool='all';
+  for(const id of fields)if(restoreParams.has(id))desired[id]=restoreParams.get(id);
+ }
+ for(const id of fields){
+  const field=$(id);
+  const fallback=({period:defaultPeriod(),sort:defaultSort()}[id]||'');
+  field.value=field.tagName!=='SELECT'||Array.from(field.options).some(o=>o.value===desired[id])?desired[id]:fallback;
+ }
+ for(const id of ['profile-content','rules','coverage-stats','institution-list','change-list','wechat-coverage'])$(id).replaceChildren();
+ renderInformation();
+ $('stamp').textContent='数据截至 '+date(DATA.generated_at);
+ if(initial)setView(restoreParams.get('view')||'jobs');
+ render();
+ if(initial){
+  const j=DATA.jobs.find(x=>x.id===restoreParams.get('job'));
+  if(j)showDetail(j);
+ }
+}
 let reconnectTimer,reconnectAttempts=0;
-async function load(initial=false){clearTimeout(reconnectTimer);let retryable=true;try{const r=await fetch('./data/finance.json',{cache:'no-store'});if([401,403,503].includes(r.status)){try{localStorage.removeItem('finance-cache-v1')}catch{}}if(!r.ok){retryable=r.status>=500;throw Error(r.status===401?'登录已过期，请回到入口重新登录。':'岗位读取失败（'+r.status+'）。')}DATA=await r.json();reconnectAttempts=0;try{localStorage.setItem('finance-cache-v1',JSON.stringify(DATA))}catch{}try{const p=await fetch('./data/data.json');if(p.ok)PRODUCT=await p.json()}catch{}setupData();$('error').hidden=true;if(initial){const p=restoreParams;if(DATA.pools[p.get('pool')])pool=p.get('pool');for(const id of fields)if(p.has(id))$(id).value=p.get(id);setView(p.get('view')||'jobs');render();const j=DATA.jobs.find(x=>x.id===p.get('job'));if(j)showDetail(j)}return true}catch(e){$('error').replaceChildren(el('span','',e.message));const retry=el('button','','立即重连');retry.onclick=()=>load();$('error').append(retry);if(retryable){const delay=Math.min(30000,5000*2**Math.min(reconnectAttempts++,3));$('error').append(el('span','',` ${delay/1000} 秒后自动重连`));reconnectTimer=setTimeout(()=>load(initial&&!DATA),delay)}$('error').hidden=false;if(!DATA){try{DATA=JSON.parse(localStorage.getItem('finance-cache-v1'));if(DATA){setupData();$('error').prepend(el('strong','','当前为上次缓存，请核对数据时间。 '))}}catch{}}if(!DATA)$('count').textContent='岗位暂时无法读取';return false}}
+async function load(initial=false){
+ clearTimeout(reconnectTimer);
+ let retryable=true;
+ try{
+  const r=await fetch('./data/finance.json',{cache:'no-store'});
+  if([401,403,503].includes(r.status)){try{localStorage.removeItem('finance-cache-v1')}catch{}}
+  if(!r.ok){retryable=r.status>=500;throw Error(r.status===401?'登录已过期，请回到入口重新登录。':'岗位读取失败（'+r.status+'）。')}
+  DATA=await r.json();
+  reconnectAttempts=0;
+  try{localStorage.setItem('finance-cache-v1',JSON.stringify(DATA))}catch{}
+  try{const p=await fetch('./data/data.json');if(p.ok)PRODUCT=await p.json()}catch{}
+  setupData(initial);
+  $('error').hidden=true;
+  return true;
+ }catch(e){
+  $('error').replaceChildren(el('span','',e.message));
+  const retry=el('button','','立即重连');
+  retry.onclick=()=>load(initial);
+  $('error').append(retry);
+  if(retryable){
+   const delay=Math.min(30000,5000*2**Math.min(reconnectAttempts++,3));
+   $('error').append(el('span','',` ${delay/1000} 秒后自动重连`));
+   reconnectTimer=setTimeout(()=>load(initial),delay);
+  }
+  $('error').hidden=false;
+  if(!DATA){
+   try{
+    DATA=JSON.parse(localStorage.getItem('finance-cache-v1'));
+    if(DATA){setupData(initial);$('error').prepend(el('strong','','当前为上次缓存，请核对数据时间。 '))}
+   }catch{}
+  }
+  if(!DATA)$('count').textContent='岗位暂时无法读取';
+  return false;
+ }
+}
 function renderRuntime(s){if(s.snapshot_at){RadarPublication.update(s);return;}const running=s.status==='running';$('refresh').disabled=running||updating;$('refresh').textContent=running||updating?'正在更新…':'更新岗位';$('status').textContent=running?'正在后台读取，完成后自动更新页面':s.status==='failed'?'上次更新失败 · 已保留成功结果':'每 5 分钟检查新消息 · 未读内容独立补齐';if(s.status==='failed')toast('后台更新失败，可重试；已保留成功结果')}
 async function refreshNow(){if(updating)return;updating=true;$('refresh').disabled=true;$('refresh').textContent='正在更新…';const old=DATA?.generated_at;try{const r=await fetch('/api/refresh',{method:'POST',headers:{'X-Workbench':'local'}});if(!r.ok)throw Error('更新未启动（'+r.status+'），请重试。');toast('后台更新已开始，完成后自动显示结果');let seen=false,done=false;for(let n=0;n<90;n++){await new Promise(r=>setTimeout(r,2000));const r=await fetch('./data/status.json');if(!r.ok)throw Error('更新状态暂时无法读取，请稍后重试');const s=await r.json();renderRuntime(s);if(s.status==='running'){seen=true;continue}if(s.status==='failed')throw Error('本次更新失败，已保留上次结果');if(s.status==='ok'&&(seen||n>=1)){await load();toast(DATA.generated_at===old?'更新完成，当前没有新增岗位':'岗位已更新，筛选已保留');done=true;break}}if(!done)toast('后台仍在处理，下次进入会读取最新结果')}catch(e){toast(e.message);$('status').textContent=e.message}finally{updating=false;$('refresh').disabled=false;$('refresh').textContent='更新岗位'}}
 document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));for(const id of fields)$(id).addEventListener(id==='query'?'input':'change',()=>DATA&&render());$('quick-query').addEventListener('input',()=>{$('query').value=$('quick-query').value;render()});$('clear').onclick=resetFilters;$('refresh').onclick=refreshNow;$('filters-toggle').onclick=()=>{$('filter-panel').open=!$('filter-panel').open;if($('filter-panel').open){$('filter-panel').scrollIntoView({block:'nearest'});$('query').focus()}};$('filter-panel').addEventListener('toggle',()=>$('filters-toggle').setAttribute('aria-expanded',$('filter-panel').open));$('close-detail').onclick=()=>$('job-detail').close();$('job-detail').addEventListener('close',()=>{activeJob=null;syncURL()});
@@ -597,4 +690,4 @@ function renderInformation(){
 }
 
 $('open-unread').onclick=()=>setView('unread');
-let checkingBackground=false;setInterval(async()=>{if(document.hidden||updating||checkingBackground)return;checkingBackground=true;try{const r=await fetch('./data/status.json',{cache:'no-store'});if(r.ok){const status=await r.json();renderRuntime(status);const published=status.published_at||status.finished_at;if(published&&(!DATA||Date.parse(published)>Date.parse(DATA.generated_at)))await load();}}catch{}finally{checkingBackground=false;renderPersonalPicks()}},60000);
+let checkingBackground=false;setInterval(async()=>{if(document.hidden||updating||checkingBackground)return;checkingBackground=true;try{const r=await fetch('./data/status.json',{cache:'no-store'});if(r.ok){const status=await r.json();renderRuntime(status);const published=status.published_at||status.finished_at;if(published&&(!DATA||Date.parse(published)>Date.parse(DATA.generated_at)))await load();}}catch{}finally{checkingBackground=false}},60000);
