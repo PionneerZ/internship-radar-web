@@ -23,16 +23,27 @@ function card(j){const c=el('article','card');c.dataset.id=j.id;const top=el('di
  const reason=el('div','decision-line');reason.append(el('span','line-label','值得看'),el('p','why',compactReason(j)));const gate=el('div','decision-line gate');gate.append(el('span','line-label','门槛'),el('p','barrier',barrier(j)));c.append(reason,gate);const missingProof=ReadingQueue.decisionMissing(j);if(missingProof.length)c.append(el('p','small','还缺 '+missingProof.join('、')));
  const bottom=el('div','card-bottom'),tags=el('div','signals');if(j.is_new)tags.append(el('span','new-dot','新发现'));if(closing(j))tags.append(el('span','deadline','截止 '+j.deadline));if(j.changes.length)tags.append(el('span','deadline','JD 有变化'));tags.append(el('span','muted',!j.published_at?'首发未知':j.published_at),el('span','muted',j.opening_status));const acts=el('div','cardactions');acts.append(feedbackButton(j,'saved','收藏'));const detail=el('button','primary','看岗位 →');detail.onclick=()=>showDetail(j);acts.append(detail);bottom.append(tags,acts);c.append(bottom);return c}
 const pickWeek=7*86400000;
-const pickDuties=/^(?:岗位职责|职责描述|工作职责|工作内容|实习内容|职位描述|岗位描述|Responsibilities)\s*[】\]:：]?\s*/i;
-const pickRequirements=/^(?:任职资格|任职要求|岗位要求|应聘要求|招聘要求|职位要求|实习要求|基本要求|招聘条件|任职条件|Qualifications|Requirements)\s*[】\]:：]?\s*/i;
-const pickSectionEnd=/^(?:应聘方式|申请方式|报名方式|投递方式|投递说明|简历投递|工作地点|实习地点|工作时间|实习待遇|岗位福利|实习补贴|你将获得|公司介绍|联系方式|Application)\s*[】\]:：]?\s*/i;
-const researchWork=[
- ['研究报告',/(?:撰写|完成|产出|输出|形成)[^。；\n]{0,22}(?:报告|研报|研究材料)/],
- ['模型与估值',/(?:搭建|建立|构建|开发|维护|更新)[^。；\n]{0,18}(?:模型|因子)|财务预测|估值分析|策略回测|绩效归因/],
- ['行业或公司研究',/(?:行业|产业|公司|个股|信用|宏观|利率|债券|策略|投资价值)(?:跟踪|研究|分析)|(?:行业|产业|宏观|公司)[^。；\n]{0,22}专题研究/],
- ['组合与资产配置',/资产配置|组合(?:研究|构建|优化|分析)|基金研究|基金评价|多资产研究/],
- ['项目尽调',/尽职调查|尽调访谈|投资尽调|项目尽调|管理层访谈/]
+const pickDuties=/^(?:岗位主要职责|岗位职责|职责描述|工作职责|工作内容|实习内容|实习职责|职位职责|主要职责|主要工作(?:内容)?|工作任务|职位描述|岗位描述|Responsibilities|Job Description)(?=$|[\s】\]:：])\s*[】\]:：]?\s*/i;
+const pickRequirements=/^(?:任职资格|任职要求|岗位要求|应聘要求|招聘要求|职位要求|实习要求|基本要求|招聘条件|任职条件|Qualifications|Requirements)(?=$|[\s】\]:：])\s*[】\]:：]?\s*/i;
+const pickSectionEnd=/^(?:应聘方式|申请方式|报名方式|投递方式|投递说明|简历投递|工作地点|实习地点|工作时间|实习待遇|实习收获|岗位福利|实习补贴|你将获得|公司介绍|公司简介|联系方式|Application|申请)(?=$|[\s】\]:：])/i;
+const financeOutputs=[
+ ['研究报告',/(?:撰写|完成|产出|输出|形成|编制)[^。；\n]{0,26}(?:研报|(?:深度|研究|策略|行业|信用|尽调|点评|专题|投资|可行性)[^。；\n]{0,8}报告)|(?:研究|策略|信用|尽调|专题)报告(?:撰写|编制)/],
+ ['建模与估值',/(?:搭建|建立|构建|开发|维护|更新|优化)[^。；\n]{0,22}(?:预测|估值|定价|风险|财务|金融|量化)[^。；\n]{0,6}模型|(?:财务|估值|定价|风险|量化)模型(?:搭建|开发|构建)|财务预测|估值(?:分析|建模)|(?:财务|估值|定价)建模/],
+ ['组合与基金分析',/(?:分析|研究|构建|优化|拟定|制定)[^。；\n]{0,18}(?:资产配置|投资组合|基金组合|配置方案)|资产配置(?:研究|模型|方案|建议)|组合(?:构建|优化|归因|分析|研究)|基金(?:评价|筛选|研究|绩效归因)|管理人(?:研究|尽调)|绩效归因/],
+ ['因子与策略开发',/(?:开发|构建|检验|优化|回测)[^。；\n]{0,20}(?:因子|策略|信号)|策略(?:回测|开发|测试)|因子(?:挖掘|开发|检验)|衍生品定价|波动率曲面/]
 ];
+const financeResearch=[
+ ['行业与基本面',/(?:行业|产业|赛道|公司|个股|上市公司|市场|商业模式|投资价值|基本面)[^。；\n]{0,9}(?:深度研究|研究|分析)|(?:深入|深度|专题|基本面)研究/],
+ ['宏观与信用',/(?:宏观(?:经济)?|利率|债券|固收|信用|转债|发债主体|发行人|商品产业链)[^。；\n]{0,10}(?:研究|分析)|开展[^。；\n]{0,30}(?:发债主体|发行人)[^。；\n]{0,8}(?:研究|分析)/],
+ ['尽调与投资判断',/尽职调查|(?:投资|项目|主体|信用)尽调|尽调访谈|管理层访谈|可行性分析|投资(?:机会|标的)(?:筛选|评估)|挖掘投资机会|投资判断/]
+];
+const financeSupport=/(?:清算|对账|划款|档案归档|材料归档|报送|排版|设备台账|会议安排|路演安排|系统维护|运营决策|行政事务|拉新|开户|获客|销售指标|渠道维护|客户开发)/;
+const financeSales=/机构销售|销售实习|渠道销售|财富顾问|理财顾问|开户拉新|销售指标|客户开发|开发客户|销售转化|产品销售|销售产品/;
+const financeExecution=/簿记建档|债券承销|申报材料|发行材料|发行执行|交易执行|交易指令|下单|询价配售|项目执行|融资流程/;
+const technicalGate=/(?:熟练|精通|掌握|擅长|具备|必须|要求|熟悉)[^。；\n]{0,40}(?:\b(?:Python|C\+\+|MATLAB|Linux|机器学习|深度学习)\b|C\+\+|高频|随机过程|复杂定价|量化(?:策略|研究)经验|(?:财务|估值|定价|风险|金融)模型)|(?:已有|曾有|曾在|必须有|至少)[^。；\n]{0,32}(?:投研|并购|量化|投行|行业)[^。；\n]{0,14}(?:实习|经验|经历)/i;
+const preferredCondition=/优先|加分|为佳|更佳|不限|优先考虑|preferred|a plus/i;
+const cohortCondition=/(?:20\d{2}(?:\s*(?:至|[—–~/-])\s*(?:20)?\d{2})?\s*(?:届|年毕业)|次年毕业|毕业时间|毕业届别)/;
+const dutyAction=/^(?:(?:在|由)[^，,。；]{1,28}(?:指导|带领)下\s*[，,]?\s*)?(?:协助|负责|参与|开展|进行|完成|支持|撰写|搭建|分析|研究|开发|维护|跟踪|收集|编制|整理|了解|Assist\b|Conduct\b|Support\b|Develop\b)/i;
 const productWork=[
  ['调研与需求分析',/用户调研|竞品分析|需求分析|需求挖掘|用户需求|产品调研/],
  ['方案与原型',/原型设计|需求文档|PRD|方案设计|产品设计|实验需求|策略设计/i],
@@ -41,33 +52,30 @@ const productWork=[
 ];
 // Only dated evidence about the matching business. Brand, compensation and conversion are separate.
 const institutionEvidence=[
- {company:'中金公司',applies:j=>j.pool==='core'&&j.team==='研究部',
-  label:'2024 年报 · 研究团队与行业覆盖',url:'https://www.cicc.com/upload/file/2025/04/01/ccb3aeab-9739-4169-aaa0-1d890bba7148.pdf'},
+  {company:'中金公司',applies:j=>j.pool==='core'&&j.team==='研究部',
+   label:'2024 年报 · 研究业务与行业覆盖',scope:'研究部层级证据，家电组的独立规模及留用未核实。',
+   url:'https://www.cicc.com/upload/file/2025/04/01/ccb3aeab-9739-4169-aaa0-1d890bba7148.pdf'},
  {company:'兴证全球基金',applies:j=>j.family==='配置与基金',
-  label:'2025 三季报 · 多资产 FOF',url:'https://www.xqfunds.com/data/20251027164455jjpz.pdf'}
+   label:'2025 三季报 · 多资产 FOF',scope:'已披露的同类策略，团队当前规模及留用未核实。',
+   url:'https://www.xqfunds.com/data/20251027164455jjpz.pdf'}
 ];
-const pickOverlap=[
- [/消费.*研究/,/消费品|消费行业|家电|零售|餐饮|食品饮料|纺服|美妆|快消/],
- [/资产配置/,/资产配置|多[元]?资产|组合(?:研究|构建|优化)|基金评价|FOF/i],
- [/债券|信用|固收/,/债券|信用研究|发行人|固收|固定收益/],
- [/并购/,/并购|收购|M&A/i],
- [/期权|波动率/,/期权|波动率/],
-];
-let personalPicksState;
+let personalPicksState, financeAssessmentCache;
 
 function pickSections(j){
  const duties=[],requirements=[];
  let section=null;
- for(const line of (j.original||'').split(/\r?\n/)){
-  const value=line.trim().replace(/^[【\[]/,'');
-  if(pickDuties.test(value)){section=duties;section.push(value.replace(pickDuties,''))}
+ for(const line of (j.original||'').split(/\r?\n/).slice(1)){
+  const value=line.trim().replace(/^[【\[]\s*/,'');
+  const inline=value.match(/(?:【|\[)(?:任职资格|岗位要求|任职要求|应聘要求|实习要求)(?:】|\])/);
+  if(pickDuties.test(value)){
+   section=duties;
+   duties.push(value.slice(0,inline?.index??value.length).replace(pickDuties,''));
+   if(inline){section=requirements;requirements.push(value.slice(inline.index+inline[0].length).replace(/^\s*[:：]?\s*/,''))}
+  }
   else if(pickRequirements.test(value)){section=requirements;section.push(value.replace(pickRequirements,''))}
-  else if(pickSectionEnd.test(value))section=null;
+  else if(pickSectionEnd.test(value)||/^(?:转正后|正式入职后|投递|请将简历)/.test(value))section=false;
   else if(section&&value)section.push(line.trim());
- }
- if(!duties.some(Boolean)){
-  const quote=j.matching?.direction?.quote;
-  if(quote&&/(?:撰写|搭建|构建|开展|负责|参与|协助)/.test(quote)&&!/(?:优先|要求|投递|请发送)/.test(quote))duties.push(quote);
+  else if(section===null&&dutyAction.test(value.normalize('NFKC').replace(/^\s*\(?\d+[)、.．]\s*/,'')))duties.push(line.trim());
  }
  return {duties:duties.filter(Boolean),requirements:requirements.filter(Boolean)};
 }
