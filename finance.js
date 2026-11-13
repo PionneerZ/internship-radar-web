@@ -14,13 +14,11 @@ function defaultSort(){return priorityOwner()?'priority':'direction'}
 function defaultPool(){return 'all'}
 function defaultPeriod(){return priorityOwner()?'all':'week'}
 function syncURL(){const p=new URLSearchParams();if(pool&&pool!==defaultPool())p.set('pool',pool);if(view!=='jobs')p.set('view',view);for(const id of fields){const v=$(id).value;if(v&&v!==({period:defaultPeriod(),sort:defaultSort()}[id]||''))p.set(id,v)}if(activeJob)p.set('job',activeJob);history.replaceState(null,'',location.pathname+(p.size?'?'+p:''))}
-function setView(next){view=['jobs','unread','coverage','profile','acceptance'].includes(next)?next:'jobs';for(const x of ['jobs','unread','coverage','profile','acceptance'])$(x).hidden=x!==view;$('reading-entry').hidden=view==='unread';$('decision-entry').hidden=view==='unread';document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===view));syncURL()}
+function setView(next){view=['jobs','unread','coverage','profile','acceptance'].includes(next)?next:'jobs';for(const x of ['jobs','unread','coverage','profile','acceptance'])$(x).hidden=x!==view;$('decision-entry').hidden=view!=='jobs';document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===view));syncURL()}
 function option(id,value,label=value){const o=el('option','',label);o.value=value;$(id).append(o)}
 function inPeriod(j,period){
  if(period==='all')return true;
- const cutoff=pickTime(DATA.window_start);
- if(period==='published')return pickTime(j.published_at)>=cutoff;
- return !j.outside_current_scan&&[j.published_at,j.forwarded_at,j.article_published_at].some(value=>pickTime(value)>=cutoff);
+ return ReadingQueue.decisionInWindow(j,DATA,period==='published');
 }
 function closing(j){if(!j.deadline)return false;const d=(Date.parse(j.deadline+'T23:59:59')-Date.now())/86400000;return d>=0&&d<=7}
 function feedbackAction(j,key){const before=!!feedback[j.id]?.[key];feedback[j.id]??={};feedback[j.id][key]=!before;let saved=true;try{localStorage.setItem('finance-feedback-v1',JSON.stringify(feedback))}catch{saved=false}render();if(activeJob===j.id)showDetail(j,false);const msg=key==='saved'?(before?'已取消收藏':'已收藏，可在“收藏”查看'):key==='ignored'?(before?'已恢复显示':'已忽略这条岗位'):(before?'已取消投递标记':'已标记为已投递，不会自动发送');toast(msg+(saved?'':' · 本次页面有效'),()=>{feedback[j.id][key]=before;try{localStorage.setItem('finance-feedback-v1',JSON.stringify(feedback))}catch{}render();if(activeJob===j.id)showDetail(j,false)})}
@@ -654,6 +652,8 @@ function matchesFocus(j,focus,assessment){
 
 function render(){
  if(!DATA)return;
+ const assessment=priorityOwner()?financeAssessments():null;
+ const q=$('query').value.trim().toLowerCase(),focus=$('focus').value,period=$('period').value;
  ReadingQueue.mountClues($('jobs'),PRODUCT?.reading_queue,'finance',DATA.jobs,PRODUCT);
  ReadingQueue.decisions($('decision-entry'),PRODUCT?.reading_queue,DATA.jobs.filter(j=>!feedback[j.id]?.ignored),PRODUCT?.image_issues,(key,stage)=>{
   if(key==='pending'||key==='gaps'){
@@ -661,11 +661,9 @@ function render(){
    setView('unread');ReadingQueue.show($('reading-panel'),stage);return
   }
   pool='all';
-  for(const id of fields)$(id).value=({period:'all',sort:defaultSort(),focus:key}[id]||'');
-  setView('jobs');render();$('query').focus({preventScroll:true});$('jobs').scrollIntoView({block:'start'});
- });
- const assessment=priorityOwner()?financeAssessments():null;
- const q=$('query').value.trim().toLowerCase(),focus=$('focus').value,period=$('period').value;
+   for(const id of fields)$(id).value=({period:'week',sort:defaultSort(),focus:key}[id]||'');
+   setView('jobs');render();$('count').focus({preventScroll:true});$('count').scrollIntoView({block:'start'});
+  },{board:DATA,activeKey:period==='week'?focus:'',isOpen:j=>matchesFocus(j,'open',assessment?.get(j.id))});
  const city=$('city').value,type=$('type').value,direction=$('direction').value,family=$('family').value,eligibility=$('eligibility').value;
  const bucket=$('bucket').value,order=$('sort').value;
  const all=DATA.jobs.filter(j=>inPeriod(j,period));
@@ -697,7 +695,8 @@ function render(){
   return(rank[a.matching.direction.label]??0)-(rank[b.matching.direction.label]??0)||Number(b.is_new)-Number(a.is_new)||a.title.localeCompare(b.title,'zh');
  });
  $('count').tabIndex=-1;
- $('count').replaceChildren(el('strong','',rows.length+' 条'),document.createTextNode(' · '+(careerDirections[direction]||(pool==='all'?'金融四池':DATA.pools[pool]))));
+ const focusLabel=decisionFocus.has(focus)?$('focus').selectedOptions[0]?.textContent:'';
+ $('count').replaceChildren(el('strong','',rows.length+' 条'),document.createTextNode(' · '+(focusLabel||careerDirections[direction]||(pool==='all'?'金融四池':DATA.pools[pool]))));
  const undated=rows.filter(j=>!j.published_at).length;
  const ignored=currentPool.filter(j=>feedback[j.id]?.ignored).length;
  $('date-note').textContent=[undated+' 条首发未知',ignored&&ignored+' 条已忽略','招聘信息条数不等于 HC'].filter(Boolean).join(' · ');
@@ -815,7 +814,8 @@ function setupData(initial=false){
  if(initial){
   const requestedPool=restoreParams.get('pool');
   if(requestedPool==='all'||Object.hasOwn(DATA.pools,requestedPool))pool=requestedPool;
-  else if(decisionFocus.has(restoreParams.get('focus')))pool='all';
+   else if(decisionFocus.has(restoreParams.get('focus')))pool='all';
+   if(decisionFocus.has(restoreParams.get('focus')))desired.period='week';
   for(const id of fields)if(restoreParams.has(id))desired[id]=restoreParams.get(id);
  }
  for(const id of fields){
@@ -876,7 +876,7 @@ for(const id of fields){$(id).name=id;$(id).autocomplete='off'}
 load(true).then(async()=>{try{const r=await fetch('./data/status.json');if(r.ok)renderRuntime(await r.json());if(location.hostname==='127.0.0.1'||location.hostname==='localhost'){const m=await(await fetch('./data/mobile.json')).json();if(m.available){$('mobile').href=m.url;$('mobile').hidden=false}}}catch{}});
 
 function renderInformation(){
- const queue=PRODUCT?.reading_queue,backlog=ReadingQueue.weekQueue(queue);ReadingQueue.mount($('reading-panel'),queue,PRODUCT?.image_issues||[]);$('unread-count').textContent=backlog?.total??'';$('reading-entry-text').textContent=backlog?`近七天补读 ${backlog.total} 篇 · 已归类 ${backlog.classified} · 方向待抽查 ${backlog.sample}`:'暂时无法读取补读清单。';
+ const queue=PRODUCT?.reading_queue,backlog=ReadingQueue.weekQueue(queue);ReadingQueue.mount($('reading-panel'),queue,PRODUCT?.image_issues||[]);$('unread-count').textContent=backlog?.total??'';
  const p=DATA.profile;$('profile-content').append(el('p','',p.education.map(e=>e.school+' '+e.degree+' '+e.major+' '+(e.year||'')).join('；')),el('p','','当前主方向：'+p.career+'。重视：'+p.priorities.join('、')+'。'),el('p','','经历：'+p.experience.join('、')+'；项目：'+p.projects.join('、')+'。'),el('p','','当前实习：'+p.internship_cities.join('、')+'；长期就业目标：'+p.long_term_city+'。'),el('p','notice',p.note),el('p','','未知：毕业届别、到岗日期、每周天数、连续月数、远程与异地接受度、最低补贴、英语、证书、银行专业岗开关。'));
  DATA.rules.forEach(x=>$('rules').append(el('li','',x)));$('coverage-note').textContent=DATA.coverage_note;
  const sources=DATA.sources;for(const [v,l] of [[DATA.jobs.length,'已取得 JD 的条目'],[sources.filter(s=>s.status==='read').length,'公开页面已读'],[sources.filter(s=>s.status==='failed').length,'公开来源读取失败'],[sources.filter(s=>s.status==='index_only'||s.status==='not_checked').length,'目录 / 待展开']]){const m=el('div','metric');m.append(el('b','',v),el('span','',l));$('coverage-stats').append(m)}
@@ -888,5 +888,4 @@ function renderInformation(){
  const wc=$('wechat-coverage');if(PRODUCT){wc.append(el('p','',`微信读取沿用已授权招聘来源，详细范围和待补队列见产品看板。`),link('查看微信来源与未读清单','./product.html?tab=pending'));const summary=DATA.wechat_coverage;if(summary){const counts=el('div');wc.append(counts);table(counts,['项目','当前数量'],Object.entries(summary).map(([k,v])=>[k,String(v)]))}}else wc.append(el('p','notice','微信覆盖接口读取失败，不能认定没有缺口。'));
 }
 
-$('open-unread').onclick=()=>setView('unread');
 let checkingBackground=false;setInterval(async()=>{if(document.hidden||updating||checkingBackground)return;checkingBackground=true;try{const r=await fetch('./data/status.json',{cache:'no-store'});if(r.ok){const status=await r.json();renderRuntime(status);const published=status.published_at||status.finished_at;if(published&&(!DATA||Date.parse(published)>Date.parse(DATA.generated_at)))await load();}}catch{}finally{checkingBackground=false}},60000);

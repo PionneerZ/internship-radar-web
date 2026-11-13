@@ -41,8 +41,8 @@ window.ReadingQueue = (() => {
  const pending=priority;
  function weekQueue(q){
   if(!q?.items)return null;
-  const first=q.items.filter(priority).length, checks=q.items.filter(sample).length,classified=q.items.filter(direction).length;
-   return {priority:first,sample:checks,classified,total:first};
+   const focus=q.items.filter(priority),images=focus.filter(a=>a.stage==='images').length;
+   return {priority:focus.length,sample:q.items.filter(sample).length,classified:q.items.filter(direction).length,total:focus.length,body:focus.length-images,images};
  }
  function readingAction(a){
    return a.action||{label:a.stage_label,next_action:a.reason,retry_at:a.next_retry_at};
@@ -157,7 +157,24 @@ window.ReadingQueue = (() => {
   const url=new URL(path,location.href);url.searchParams.set('job',evidence.job_id);return url.href;
  }
  const lanes={messages:['群消息',300],body:['微信正文',60],offline:['本机缓存与群文件',300],article_images:['文章图片',300],group_images:['群图片',1800],public_sources:['已登记招聘网站',1800],weread:['微信读书实测',60]};
- const chinaDate=value=>new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai'}).format(value);
+  const chinaDateFormat=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai'});
+  const chinaDate=value=>chinaDateFormat.format(value);
+  function jobTime(value){
+   if(typeof value!=='string'||!value)return NaN;
+   const iso=value.trim().replace(' ','T');
+   if(/^\d{4}-\d{2}-\d{2}$/.test(iso))return Date.parse(iso+'T00:00:00+08:00');
+   return Date.parse(/T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(iso)?iso+'+08:00':iso);
+  }
+  function decisionInWindow(j,board,publishedOnly=false){
+   if(!publishedOnly&&j.outside_current_scan)return false;
+   const from=jobTime(board?.window_start),to=jobTime(board?.window_end);
+   const clocks=publishedOnly?[j.published_at]:
+    [j.published_at,j.article_published_at,j.forwarded_at,j.posted_at,j.first_discovered_at,j.first_seen_at];
+   return clocks.some(value=>{
+    const at=jobTime(value),last=typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)?at+86399999:at;
+    return at<=to&&last>=from;
+   });
+  }
  function decisionCandidate(j){
   return j.bucket!=='明显不符'&&j.category!=='lead'&&j.decision?.opening!=='closed'&&
     !j.decision?.missing?.some(key=>key==='direction'||key==='location');
@@ -169,7 +186,7 @@ window.ReadingQueue = (() => {
   return decisionCandidate(j)&&decisionMissing(j).length>0;
  }
  function decisionNew(j){
-  const at=Date.parse(j.decision?.first_ready_at||'');
+   const at=jobTime(j.decision?.first_ready_at);
   return decisionCandidate(j)&&j.decision?.ready===true&&Number.isFinite(at)&&chinaDate(at)===chinaDate(Date.now());
  }
  function decisionOpen(j){
@@ -181,14 +198,15 @@ window.ReadingQueue = (() => {
  }
  function decisionToday(j){
   if(!decisionReady(j))return false;
-  const discovered=Date.parse(j.first_discovered_at||j.first_seen_at||'');
+   const discovered=jobTime(j.first_discovered_at||j.first_seen_at);
   const deadline=Date.parse((j.deadline||'')+'T23:59:59+08:00')-Date.now();
-  const changed=Date.parse(j.changes?.at(-1)?.at||'');
+   const changed=jobTime(j.changes?.at(-1)?.at);
   return (Number.isFinite(discovered)&&chinaDate(discovered)===chinaDate(Date.now()))||
     (deadline>=0&&deadline<=7*86400000)||(Number.isFinite(changed)&&chinaDate(changed)===chinaDate(Date.now()));
  }
- function decisions(root,queue,jobs,images,onAction){
+  function decisions(root,queue,jobs,images,onAction,{board,activeKey='',isOpen=decisionOpen}={}){
   if(!root)return;
+   jobs=jobs.filter(j=>decisionInWindow(j,board));
   const backlog=weekQueue(queue);
   const missing=(images||[]).filter(x=>!x.verified_copy).length;
   const gaps=missing+(queue?.source_gaps?.length||0);
@@ -196,17 +214,21 @@ window.ReadingQueue = (() => {
   const needs={};
   for(const j of wanted)for(const label of decisionMissing(j))needs[label]=(needs[label]||0)+1;
   const top=Object.entries(needs).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([label,count])=>`${label} ${count}`).join(' · ');
-  const entries=[
-   ['ready','岗位资料齐备',jobs.some(j=>j.decision?.information_missing)?jobs.filter(decisionReady).length:'—','机构、岗位、地点、职责、任职条件'],
-   ['information_gaps','岗位资料待补',jobs.some(j=>j.decision?.information_missing)?wanted.length:'—',top||'查看岗位仍缺的资料'],
-   ['open','已确认开放',jobs.some(j=>j.decision)?jobs.filter(decisionOpen).length:'—','官方页面确认仍开放的岗位'],
-   ['pending','近七天补读队列',backlog?.total??'—',backlog?`已归类 ${backlog.classified} · 方向待抽查 ${backlog.sample}`:'补读清单暂不可用'],
-   ['gaps','来源与原图缺口',queue?gaps:'—','查看原图和同步缺口'],
-  ];
+   const entries=[
+    ['today','今日值得看',jobs.filter(decisionToday).length,'今日新发现、有变化或临近截止'],
+    ['ready','岗位资料齐备',jobs.filter(decisionReady).length,'机构、岗位、地点、职责和条件'],
+    ['information_gaps','岗位资料待补',wanted.length,top||'查看岗位仍缺的资料'],
+    ['open','已确认开放',jobs.filter(isOpen).length,'官方来源确认开放'],
+    ['pending','优先补读',backlog?.total??'—',backlog?`正文 ${backlog.body} · 文章图片 ${backlog.images}`:'补读清单暂不可用'],
+    ['gaps','来源与原图缺口',queue?gaps:'—','含历史 · 群图和来源同步'],
+   ];
   const active=document.activeElement?.dataset.decision;
-  root.replaceChildren();
+   const heading=el('div','rq-decision-heading');
+   heading.append(el('strong','','日常速览'),el('span','','岗位与优先补读 · 近七天'));
+   root.replaceChildren(heading);
   for(const [key,label,count,hint] of entries){
    const b=el('button','rq-decision');b.type='button';b.dataset.decision=key;
+    if(!['pending','gaps'].includes(key))b.setAttribute('aria-pressed',String(key===activeKey));
    b.append(el('span','rq-decision-label',label),el('strong','',count),el('small','',hint));
    b.onclick=()=>onAction(key,key==='gaps'?(missing?'group_images':'sources'):'pending');root.append(b);
    if(key===active)b.focus({preventScroll:true});
@@ -435,5 +457,5 @@ window.ReadingQueue = (() => {
   for(const d of c.daily||[])detail.append(el('p','',`${d.date}：新发现 ${d.discovered} / 首次读全 ${d.completed}`));
   detail.append(el('p','rq-muted','72 个日历小时内至少 60 个小时有真实样本，连续三日读全不落后新增且总积压下降，才认定追上；未满足时不估算清空日期。'));root.append(detail);
  }
- return {mount,mountClues,show,decisions,decisionReady,decisionNeedsInformation,decisionToday,decisionNew,decisionOpen,decisionMissing,weekQueue,weekPriority:q=>weekQueue(q)?.priority,sourceLabel,sourceRow};
+ return {mount,mountClues,show,decisions,decisionInWindow,decisionReady,decisionNeedsInformation,decisionToday,decisionNew,decisionOpen,decisionMissing,weekQueue,weekPriority:q=>weekQueue(q)?.priority,sourceLabel,sourceRow};
 })();
