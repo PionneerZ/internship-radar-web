@@ -38,21 +38,14 @@ window.ReadingQueue = (() => {
  const priority=a=>unread(a)&&a.read_priority==='focus';
  const sample=a=>unread(a)&&a.read_priority==='sample';
  const direction=a=>unread(a)&&a.read_priority==='clue';
- const pending=a=>priority(a)||sample(a)||direction(a);
+ const pending=priority;
  function weekQueue(q){
   if(!q?.items)return null;
   const first=q.items.filter(priority).length, checks=q.items.filter(sample).length,classified=q.items.filter(direction).length;
-  return {priority:first,sample:checks,classified,total:first+checks+classified};
+   return {priority:first,sample:checks,classified,total:first};
  }
- function readingAction(a,q){
-  const action=a.action||{label:a.stage_label,next_action:a.reason,retry_at:a.next_retry_at};
-  if(action.blocker!=='role_classified')return action;
-  const retryAt=q.cooldown_until||a.next_retry_at;
-  return {
-   label:retryAt?'方向已分 · 等待冷却':'方向已分 · 原文待补',
-   next_action:retryAt?'冷却结束后自动恢复原文补读。':'已按标题或简介分流，正文由后台自动补读。',
-   retry_at:retryAt
-  };
+ function readingAction(a){
+   return a.action||{label:a.stage_label,next_action:a.reason,retry_at:a.next_retry_at};
  }
  const previewRank=a=>a.excerpt_kind==='body'?2:a.card_evidence?1:0;
  function previewKey(a){
@@ -207,7 +200,7 @@ window.ReadingQueue = (() => {
    ['ready','岗位资料齐备',jobs.some(j=>j.decision?.information_missing)?jobs.filter(decisionReady).length:'—','机构、岗位、地点、职责、任职条件'],
    ['information_gaps','岗位资料待补',jobs.some(j=>j.decision?.information_missing)?wanted.length:'—',top||'查看岗位仍缺的资料'],
    ['open','已确认开放',jobs.some(j=>j.decision)?jobs.filter(decisionOpen).length:'—','官方页面确认仍开放的岗位'],
-   ['pending','近七天补读队列',backlog?.total??'—',backlog?`优先 ${backlog.priority} · 已归类原文 ${backlog.classified} · 抽查 ${backlog.sample}`:'补读清单暂不可用'],
+   ['pending','近七天补读队列',backlog?.total??'—',backlog?`已归类 ${backlog.classified} · 方向待抽查 ${backlog.sample}`:'补读清单暂不可用'],
    ['gaps','来源与原图缺口',queue?gaps:'—','查看原图和同步缺口'],
   ];
   const active=document.activeElement?.dataset.decision;
@@ -267,7 +260,7 @@ window.ReadingQueue = (() => {
   detail.append(el('summary','',`同标题和简介 · 还有 ${group.others.length} 篇`));
   const list=el('ul');
   for(const a of group.others){
-    const row=el('li'),action=readingAction(a,s.queue);
+    const row=el('li'),action=readingAction(a);
    const top=el('div','rq-item-top');
    top.append(el('span','rq-badge',action.label||a.stage_label),el('span','rq-muted',a.account+' · '+time(a.seen_at)));
     const next=retry(action.retry_at||a.next_retry_at);
@@ -290,7 +283,7 @@ window.ReadingQueue = (() => {
   s.batchHelp.replaceChildren();
   const groups=new Map();for(const image of s.images){const name=image.source||'已授权招聘来源';groups.set(name,(groups.get(name)||0)+1);}
   const entries=[
-    ['正文待补（含历史）',`${focus.length-images} 篇优先 · ${all.filter(direction).length} 篇已归类 · ${all.filter(sample).length} 篇抽查`,q.cooldown_until?`共同等待验证冷却至 ${time(q.cooldown_until)}，到期先正常试读 1 篇，成功后接续。`:'金融、产品和实习汇总优先。微信正文通道每小时最多抽查 1 篇方向不明的文章。','缓存与图片通道独立工作。','body'],
+     ['正文待补（含历史）',`${focus.length-images} 篇`,q.cooldown_until?`验证冷却至 ${time(q.cooldown_until)}，到期先正常试读 1 篇，成功后接续。`:'优先处理有岗位证据缺口的文章和相关招聘汇总。','已归类的线索可直接查看，方向待判的文章按天限量抽查。','body'],
    ['文章图片待补（含历史）',images+' 篇','已读正文片段仍可查看；后台继续寻找和识别完整图片。空 OCR 不会被当作完成。','只有缺失的新原图或可靠复核能补齐的部分会继续明确保留。','images'],
    ['群图未读全',s.images.length+' 张 / '+groups.size+' 个来源',[...groups].map(([name,count])=>name+' '+count+' 张').join('；')||'当前没有群图片缺口。','后台每 30 分钟重查原图，也会从已保存的招聘文章查找清晰同版。','group_images'],
    ['来源历史待同步',(q.source_gaps||[]).length+' 个来源','本机未同步到的历史无法靠重复刷新补出；后台每 5 分钟复查已有授权来源。','具体来源和缺口集中列在下方。用途未知的来源仅记录数量，不擅自读取。','sources']
@@ -308,11 +301,11 @@ window.ReadingQueue = (() => {
   const focus=candidates.filter(priority),checks=candidates.filter(sample).length;
   const images=focus.filter(a=>a.stage==='images').length,quick=candidates.filter(direction);
   const period=s.period==='week'?'近七天':s.period==='retained'?'七天以前':'全部保留记录';
-   s.heading.textContent=`${period}补读队列 · ${focus.length+checks+quick.length} 篇`;
+   s.heading.textContent=`${period}补读队列 · ${focus.length} 篇`;
   const summary=[
    ['priority',focus.length,'优先补读',`正文 ${focus.length-images} · 图片 ${images}`],
-   ['sample',checks,'限量抽查','汇总或方向待判'],
-    ['direction',quick.length,'已归类 · 原文待补',`金融 ${quick.filter(a=>a.role_clue?.topic==='finance').length} · 产品 ${quick.filter(a=>a.role_clue?.topic==='product').length}`],
+    ['sample',checks,'方向待抽查','按天限量抽样'],
+    ['direction',quick.length,'已按标题／简介归类',`金融 ${quick.filter(a=>a.role_clue?.topic==='finance').length} · 产品 ${quick.filter(a=>a.role_clue?.topic==='product').length}`],
    ['filtered',candidates.filter(filtered).length,'已筛除','可查看原因和原卡片'],
   ];
   for(const [key,count,label,hint] of summary){const group=key==='priority'||key==='sample'?s.digest:s.screening;const b=el('button','rq-digest-button');b.type='button';b.dataset.stage=key;b.setAttribute('aria-pressed',String(s.stage===key));b.append(el('strong','',count),el('span','',label),el('small','',hint));b.onclick=()=>{setFilter(s,'stage',key);group.querySelector('[aria-pressed=true]').focus({preventScroll:true});};group.append(b);}
@@ -344,7 +337,7 @@ window.ReadingQueue = (() => {
    .sort((a,b)=>(cardView?Number(Boolean(b.card_evidence.job_id))-Number(Boolean(a.card_evidence.job_id)):previewRank(b)-previewRank(a))||Number(a.read_priority==='sample')-Number(b.read_priority==='sample')||String(b.seen_at||'').localeCompare(a.seen_at||''));
   const groups=groupPreviews(all),folded=all.length-groups.length;
   const size=12,total=Math.max(1,Math.ceil(groups.length/size));s.page=Math.min(Math.max(0,s.page),total-1);
-   const notes={priority:'待补正文或文章图片',pending:'优先、已归类及待抽查',body:'后台等待补齐的正文',direction:'方向已分，后台继续补读原文',sample:'微信正文每小时最多抽查 1 篇',filtered:'已退出自动取文，保留原卡片和原因',deferred:'已退出自动取文，保留原卡片和原因',card_evidence:'查看已收到的职责或条件，原文仍待补',formal_review:'按标题或简介识别，实际读全单列',location_skipped:'按地点跳过，未计为读全'};
+   const notes={priority:'待补正文或文章图片',pending:'待补正文或文章图片',body:'后台等待补齐的正文',direction:'按标题或简介归类的岗位线索',sample:'微信正文每天限量抽查',filtered:'已退出自动取文，保留原卡片和原因',deferred:'已退出自动取文，保留原卡片和原因',card_evidence:'查看已收到的职责或条件，原文仍待补',formal_review:'按标题或简介识别，实际读全单列',location_skipped:'按地点跳过，未计为读全'};
   s.result.textContent=`${all.length} 篇符合筛选 · ${period} · ${notes[s.stage]||'优先显示已有内容'}${folded?` · 已折叠 ${folded} 篇相同预览`:''}`;
   if(!all.length)s.list.append(el('p','rq-empty','没有符合筛选的内容。重置筛选可查看其他未读任务。'));
   for(const group of groups.slice(s.page*size,(s.page+1)*size)){
@@ -356,7 +349,7 @@ window.ReadingQueue = (() => {
  }
  function article(a,s){
   const row=el('article','rq-item');row.dataset.article=a.id;
-   const action=readingAction(a,s.queue);
+   const action=readingAction(a);
   const top=el('div','rq-item-top');top.append(el('span','rq-badge',action.label),el('span','rq-muted',a.account+' · '+time(a.seen_at)));row.append(top);
   const h=el('h3');h.append(originalLink(a,a.title||'标题尚未取得'));row.append(h);
   if(a.official_matches?.length)row.append(el('p','rq-official','官方原帖已核实 · 微信转载仍未读全'));
