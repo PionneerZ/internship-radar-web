@@ -78,6 +78,24 @@ const sacTechnologyDebt={
  limitation:'同一年度、同一张表的机构数据；不代表整个债承团队、ABS／REITs 或正式岗回报。'
 };
 const institutionEvidence=[
+ {company:'华泰证券',applies:j=>careerDirection(j)==='sell',rating:{kind:'research-coverage',scope:'sell'},
+   label:'华泰 · 2025 年报（研究）',scope:'集团 2025 年发布研究报告 11,729 篇、组织研究路演 65,663 场。可核对研究服务规模；与中金披露的人员和覆盖数不是同一指标，不能给具体行业小组排位。',
+   asOf:'2026-03-31',url:'https://crm.htsc.com.cn/pdf_finchina/HKSTOCK/2026/2026-3/2026-03-30/2469554.pdf'},
+ {company:'银河证券',applies:j=>careerDirection(j)==='buy'&&j.family==='固收投资研究',rating:{kind:'investment-track',scope:'fixed'},
+   label:'中国银河 · 2025 年报（自营固收）',scope:'年报披露获上交所的债券交易机构和自营债券投资机构评价。支持核查固定收益投资业务；不能用于特定信评团队、基金收益或正式岗薪酬。',
+   asOf:'2026-03-31',url:'https://cdn.chinastock.com.cn/omc/investRelation/sh/601881_20260331_XWZA.pdf'},
+ {company:'嘉实基金',applies:j=>['fixed-credit','fixed-credit-mixed'].includes(platformScope(j).key),
+   label:'嘉实 · 信用团队与债券产品',scope:'机构披露信用研究团队与对应债券产品；仅支持信用业务存在，不能据此给可转债策略、交易或正式岗定级。',
+   asOf:'2026-09-22',url:'https://www.jsfund.cn/main/a/20260922/484235.shtml'},
+ {company:'联想创投',applies:j=>platformScope(j).key==='venture-robotics',rating:{kind:'portfolio-and-sector',scope:'venture-robotics'},
+   label:'联想创投 · 机器人投资组合',scope:'机构披露星动纪元、星海图、逐际动力、跨维智能等被投项目。多笔投资可核；退出回报、薪酬及实习生项目参与度另查。',
+   asOf:'2026-01-29',url:'https://capital.lenovo.com/news/detail/id/1184/s/1.html'},
+ {company:'腾讯',applies:j=>platformScope(j).key==='games-strategy',rating:{kind:'operating-segment',scope:'games-strategy'},
+   label:'腾讯 · 2025 年游戏经营',scope:'2025 年报披露本土游戏收入 1,642 亿元、国际游戏收入 774 亿元。支持验证游戏商业分析对应的业务规模；不用于评价云业务或校招薪资。',
+   asOf:'2026-03-18',url:'https://static.www.tencent.com/uploads/2026/03/18/559e5d480a4411165e6c7367d61fefbd.pdf'},
+ {company:'腾讯',applies:j=>platformScope(j).key==='cloud-strategy',
+   label:'腾讯 · 2025 年企业服务经营',scope:'年报披露企业服务进展，但分部收入也包含金融科技，不能当作云部门收入或该实习组表现。',
+   asOf:'2026-03-18',url:'https://static.www.tencent.com/uploads/2026/03/18/559e5d480a4411165e6c7367d61fefbd.pdf'},
  {company:'中金公司',applies:j=>careerDirection(j)==='sell',rating:{kind:'research-coverage',scope:'sell'},
    label:'港交所公告 · 中金研究覆盖',scope:'截至 2024 年末，研究人员近 400 人，覆盖 40 多个行业及全球 1,800 多家上市公司。证明可用研究资源，具体行业组的质量、薪酬及留用待核。',
    asOf:'2025-10-16',url:'https://www.hkexnews.hk/listedco/listconews/sehk/2025/1016/2025101601034_c.pdf'},
@@ -141,8 +159,7 @@ const institutionEvidence=[
   rating:{kind:'rank',scope:'a-reorg',rank:1},
   label:'华泰 · 2025 年报（并购）',scope:'按上市公司公开披露统计，独立财务顾问的审核类重组获注册 8 单，行业第一。该数据不能和融资额互排。',
   asOf:'2026-03-31',url:'https://crm.htsc.com.cn/pdf_finchina/HKSTOCK/2026/2026-3/2026-03-30/2469554.pdf'},
- ...[['中信证券',1904.72],['中信建投证券',1598.90],['国泰海通证券',1166.17],['中金公司',700.49],['华泰联合证券',641.18],
-  ['招商证券',444.87],['申万宏源',398.79],['广发证券',316.19],['平安证券',250.11],['东方证券',221.42],['光大证券',179.23],['银河证券',146.22]]
+ ...[['中信证券',1904.72],['中信建投证券',1598.90],['国泰海通证券',1166.17],['中金公司',700.49],['华泰联合证券',641.18],['申万宏源',398.79]]
   .map(([company,value])=>({company,applies:debtPlatform,label:'中证协 · 2025 年科创债主承销',
    scope:`机构主承销 ${value.toFixed(2)} 亿元。${sacTechnologyDebt.limitation}`,
    asOf:sacTechnologyDebt.asOf,url:sacTechnologyDebt.url,metric:{...sacTechnologyDebt,value}}))
@@ -153,7 +170,10 @@ const platformBasis={
  'research-coverage':'有规模可核的研究队伍和覆盖，未给具体小组排名',
  'repeated-transactions':'同一细分业务有成批可核的成交记录',
  'live-products-and-team':'有对应的在运产品及专门投研分工',
- 'fund-and-investments':'对应投资阶段有专项基金和多笔已投项目'
+ 'fund-and-investments':'对应投资阶段有专项基金和多笔已投项目',
+ 'portfolio-and-sector':'对应赛道有多个可核投资案例',
+ 'operating-segment':'年报单列且披露了相应经营板块的业务规模',
+ 'investment-track':'有实际投资业务，并披露对应的市场评价'
 };
 function platformScope(j,duties=''){
  const title=j.title||'',name=[title,j.team].filter(Boolean).join(' ');
@@ -162,7 +182,13 @@ function platformScope(j,duties=''){
  case 'buy':
   if(/ETF|指数投资|指数增强/.test(name))return line('index-fund','ETF／指数投资');
   if(j.family==='配置与基金')return /组合配置|资产配置|多资产|FOF|MOM/i.test(name)?line('multiasset','多资产／FOF'):line('manager','基金及管理人研究');
-  if(j.family==='固收投资研究')return /信用|可转债|利率|ABS/.test(name)?line('fixed-special','固收专项 · '+name.match(/信用|可转债|利率|ABS/)?.[0]):line('fixed','固收投资研究');
+  if(j.family==='固收投资研究'){
+   if(/信用|信评/.test(name))return /可转债/.test(name)?line('fixed-credit-mixed','固收 · 信用与可转债'):line('fixed-credit','固收 · 信用与主体研究');
+   if(/可转债/.test(name))return line('fixed-convertible','固收 · 可转债策略');
+   if(/ABS|资产证券化/i.test(name))return line('fixed-abs','固收 · ABS 投资');
+   if(/利率/.test(name))return line('fixed-rate','固收 · 利率研究');
+   return line('fixed','固收投资研究');
+  }
   return line('equity-research','买方权益／基本面研究');
  case 'sell':return line('sell','卖方研究 · 资源与具体行业组分开核对');
  case 'quant':
@@ -173,6 +199,7 @@ function platformScope(j,duties=''){
   if(/量化|因子|回测|金工|金融工程|策略研究/.test(name))return line('systematic','因子、量化及策略研究');
   return line('quant-check','量化与交易分工待核');
  case 'investing':
+  if(/具身智能|机器人/.test(name))return line('venture-robotics','具身智能／机器人投资');
   if(/CVC|企业风投|产业投资|战略投资|创投部门/i.test(name))return line('corporate-investment','产业投资／CVC');
   if(/半导体|芯片|集成电路|中芯聚源/.test(name))return line('venture-chip','半导体投资');
   if(/\bAI\b|人工智能/i.test(name))return line('venture-ai','早期 AI 投资能力（岗位阶段另核）');
@@ -189,7 +216,11 @@ function platformScope(j,duties=''){
      /(?:发行|承销|申报|参与)[^。；\n]{0,22}(?:科技创新(?:公司)?债|科创(?:公司)?债)|(?:科技创新(?:公司)?债|科创(?:公司)?债)[^。；\n]{0,22}(?:发行|承销|项目)/.test(duties))return line('tech-debt','科技创新债券主承销');
   return line('debt','通用债承 · 具体债种待核');
  case 'strategy':
-  if(/战略部|战略分析|战略研究|商业分析|商业策略/.test(name)&&!/咨询|顾问/.test(title))return line('corporate-strategy','企业内部战略与商业分析');
+  if(/战略部|战略分析|战略研究|商业分析|商业策略/.test(name)&&!/咨询|顾问/.test(title)){
+   if(/\bIEG\b|互动娱乐|游戏/i.test(name))return line('games-strategy','游戏战略与商业分析');
+   if(/\bCSIG\b|云与智慧产业|云计算|企业服务/i.test(name))return line('cloud-strategy','云与企业服务战略');
+   return line('corporate-strategy','企业内部战略与商业分析');
+  }
   if(/战略咨询|管理咨询|商业尽调/.test(name))return line('consulting','外部战略咨询／商业尽调');
   return line('strategy-check','战略咨询 · 咨询与实施分工待核');
  default:return /信用评级/.test(name)?line('credit-rating','信用评级'):line('adjacent','相邻业务 · 核对具体产出');
@@ -207,8 +238,9 @@ function assessPlatform(j,company,duties,now){
   }
   if(e.metric)return {...e,grade:0,basis:'债种不同或待核，该数据仅作参考'};
   const rating=e.rating;
-  if(!rating||rating.scope!==scope.key)return {...e,grade:1,basis:'已核业务或项目，未证明该岗位所在方向领先'};
-  return {...e,grade:rating.kind==='rank'&&rating.rank<=5?3:2,basis:platformBasis[rating.kind]};
+  if(!rating||rating.scope!==scope.key||!Object.hasOwn(platformBasis,rating.kind))return {...e,grade:1,basis:'已核业务或项目，未证明该岗位所在分线强项'};
+  if(rating.kind==='rank'&&!(Number.isInteger(rating.rank)&&rating.rank>=1&&rating.rank<=5))return {...e,grade:1,basis:'机构业务可核对，未证实进入细分业务前五'};
+  return {...e,grade:rating.kind==='rank'?3:2,basis:platformBasis[rating.kind]};
  }).sort((a,b)=>b.grade-a.grade||Number(Boolean(b.rating))-Number(Boolean(a.rating))||b.asOf.localeCompare(a.asOf));
  const lead=proofs[0],grade=lead?.grade||0;
  return {scope,grade,label:platformGrades[grade],proofs,note:lead?.basis||'暂无可核对的同业务线成果；不能判断机构好坏'};
@@ -217,6 +249,9 @@ const employerAliases=[
  ['申万宏源',/^(?:申万|申万宏源(?:证券)?(?:股份有限公司|有限公司)?(?:研究所|研究院|承销保荐(?:有限责任公司|有限公司)?)?|申万研究所.{0,24}|申银万国(?:证券)?研究所(?:有限公司)?|上海申银万国证券研究所(?:有限公司)?)$/],
  ['华西证券',/^华西证券(?:(?:股份)?有限公司)?(?:研究所|研究院)?$/],
  ['中金公司',/^(?:中金(?:公司)?|中国国际金融(?:股份有限公司)?|CICC)$/i],
+ ['华泰证券',/^(?:华泰(?:证券(?:股份有限公司)?)?(?:研究所|研究院)|华泰证券(?:股份有限公司)?)$/],
+ ['中信证券',/^中信证券(?:股份有限公司)?(?:研究所|研究院)?$/],
+ ['腾讯',/^(?:腾讯(?:科技|集团|控股|公司)?|Tencent)$/i],
  ['兴证全球基金',/^兴证全球(?:基金(?:管理(?:有限公司)?)?)?$/],
  ['嘉实基金',/^嘉实基金(?:管理(?:有限公司)?)?$/],
  ['蓝驰创投',/^蓝驰(?:创投|投资)$/],
@@ -733,7 +768,9 @@ function renderCareerPeer(target,group,focus=false){
  const byId=new Map(eligible.map(a=>[a.j.id,a]));
  const saved=careerPeerState.get(key)||[];
  const left=byId.get(saved[0])||eligible[0];
- const right=byId.get(saved[1])||eligible.find(a=>peerMetric(left,a))||
+ const right=byId.get(saved[1])||eligible.find(a=>peerMetric(left,a)?.matched)||
+  eligible.find(a=>a.company!==left.company&&a.platform.scope.key===left.platform.scope.key&&a.platform.grade>0)||
+  eligible.find(a=>peerMetric(left,a))||
   eligible.find(a=>a.company!==left.company&&a.j.family===left.j.family)||
   eligible.find(a=>a.company!==left.company)||eligible[1];
  const header=el('div','career-peer-heading'),heading=el('h3','','同行比较 · '+careerDirections[key]);
