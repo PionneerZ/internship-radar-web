@@ -92,3 +92,39 @@
 .value-pillar{display:flex;flex-direction:column;gap:4px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);min-width:0}.value-label{font-size:11px;color:var(--muted)}.value-pillar strong{font-size:13px;line-height:1.5;overflow-wrap:anywhere}.value-pillar[data-value-grade="0"] strong,.value-pillar[data-value-grade="1"] strong{color:var(--warn)}
 .company-comparison-method{margin:16px 0 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}.company-comparison-method>summary{padding:14px 16px;font-weight:650;cursor:pointer}.company-method-content{padding:0 16px 16px;font-size:14px;line-height:1.75}.comparison-order{padding-left:22px}.comparison-order li{margin:8px 0}.company-route-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:15px 0}.company-route{padding:12px;border:1px solid var(--line);border-radius:6px}.company-route summary{font-weight:650;cursor:pointer}.company-route p{margin:9px 0}.research-limit{color:var(--muted);font-size:12px}.company-coverage-table .tablewrap{max-height:600px;overflow:auto}.company-coverage-table table{min-width:900px;font-size:13px;line-height:1.65}.company-coverage-table th{position:sticky;top:0;background:var(--surface);z-index:1}.company-coverage-table td{vertical-align:top;min-width:130px}.company-coverage-table td:nth-child(2),.company-coverage-table td:nth-child(4){min-width:240px}.company-coverage-table p{margin:6px 0}.company-evidence p{margin:6px 0}.career-peer-facts{line-height:1.7}.career-peer-card .company-business-role{grid-template-columns:repeat(3,minmax(0,1fr))}
 @media(max-width:800px){.career-shortlist,.company-route-grid{grid-template-columns:minmax(0,1fr)}.career-entry{padding:12px}.company-business-role{gap:5px}.value-pillar{padding:7px}.company-method-content{padding:0 12px 12px}}
+
+/* Company research uses the existing system theme and semantic card styles. */
+.institution-open{margin:12px 0;padding:10px 16px;font-weight:650}
+#research{padding-bottom:24px;min-width:0}
+.institution-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}
+.institution-metrics>div{display:flex;flex-direction:column;gap:5px;border:1px solid color-mix(in srgb,currentColor 18%,transparent);border-radius:8px;padding:14px 16px}
+.institution-metrics strong{font-size:26px;line-height:1.2;font-variant-numeric:tabular-nums}
+.institution-metrics span{font-size:14px}
+.institution-boundary{padding:14px 0;line-height:1.7;border-block:1px solid color-mix(in srgb,currentColor 18%,transparent)}
+.institution-compare-section{margin:22px 0 30px}
+.institution-compare-controls{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:100%}
+.institution-compare-controls label,.institution-filters label{display:flex;flex-direction:column;gap:8px;font-size:14px;min-width:0}
+.institution-compare-controls select,.institution-filters select,.institution-filters input{width:100%;min-width:0;font-size:14px;min-height:40px}
+.institution-comparison-result{font-weight:600;line-height:1.8;margin:16px 0}
+.institution-compare-grid,.institution-results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.institution-filters{display:grid;grid-template-columns:minmax(220px,2fr) minmax(180px,1fr) minmax(180px,1fr) auto;gap:12px;align-items:end;margin:24px 0 12px}
+.institution-filters button{min-height:40px}
+.institution-card{min-width:0;margin:0!important;padding:20px!important}
+.institution-card-head{display:flex;align-items:start;justify-content:space-between;gap:12px}
+.institution-card h3{font-size:18px;margin:0;line-height:1.5;overflow-wrap:anywhere}
+.institution-card p{font-size:14px;line-height:1.8;margin:9px 0;overflow-wrap:anywhere}
+.institution-market{font-weight:600}.institution-verdict{line-height:1.9!important}
+.institution-caveat{border-left:3px solid color-mix(in srgb,currentColor 25%,transparent);padding:2px 0 2px 12px;margin:14px 0}
+.institution-caveat strong{font-size:14px}
+.institution-evidence{padding-top:12px;border-top:1px solid color-mix(in srgb,currentColor 16%,transparent)}
+.institution-evidence summary,.institution-perspective summary{cursor:pointer;line-height:1.7;min-height:32px;font-weight:600}
+.institution-claim{padding:12px 0;border-bottom:1px solid color-mix(in srgb,currentColor 14%,transparent)}
+.institution-source{margin:10px 0;overflow-wrap:anywhere}
+.institution-source a{font-weight:600}.institution-source .muted{font-size:13px}
+.institution-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.institution-perspectives{margin-top:36px;max-width:100%}
+.institution-perspective{padding:14px 0;border-top:1px solid color-mix(in srgb,currentColor 18%,transparent)}
+.institution-perspective p{max-width:100ch;line-height:1.8;font-size:14px}
+@media(min-width:1600px){.institution-results{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:800px){.institution-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.institution-compare-controls,.institution-compare-grid,.institution-results{grid-template-columns:1fr}.institution-filters{grid-template-columns:1fr 1fr}.institution-filters label:first-child{grid-column:1/-1}.institution-card{padding:16px!important}.institution-card h3{font-size:17px}.institution-metrics strong{font-size:24px}}
+@media(max-width:420px){.institution-filters{grid-template-columns:1fr}.institution-card-head{flex-wrap:wrap}}
