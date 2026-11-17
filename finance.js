@@ -10,7 +10,7 @@ $('filter-panel').open=desktopMedia.matches;desktopMedia.addEventListener('chang
 function link(label,url){const a=el('a','',label);if(url&&(/^https?:\/\//.test(url)||(url.startsWith('/')||url.startsWith('./')))){a.href=url;if(!(url.startsWith('/')||url.startsWith('./'))){a.target='_blank';a.rel='noopener noreferrer'}}return a}
 function table(target,headers,rows){const wrap=el('div','tablewrap');wrap.tabIndex=0;wrap.setAttribute('role','region');wrap.setAttribute('aria-label',headers.join(' / '));const t=el('table'),head=el('tr'),body=el('tbody');headers.forEach(x=>head.append(el('th','',x)));const thead=el('thead');thead.append(head);t.append(thead,body);rows.forEach(r=>{const tr=el('tr');r.forEach(v=>{const td=el('td');if(v instanceof Node)td.append(v);else td.textContent=unknown(v);tr.append(td)});body.append(tr)});wrap.append(t);target.replaceChildren(wrap)}
 function toast(text,undo){clearTimeout(toastTimer);($('job-detail').open?$('job-detail'):document.body).append($('toast'));$('toast').replaceChildren(el('span','',text));if(undo){const b=el('button','','撤销');b.onclick=()=>{undo();$('toast').hidden=true};$('toast').append(b)}$('toast').hidden=false;toastTimer=setTimeout(()=>$('toast').hidden=true,6000)}
-function defaultSort(){return priorityOwner()?'priority':'direction'}
+function defaultSort(){return 'priority'}
 function defaultPool(){return 'all'}
 function defaultPeriod(){return priorityOwner()?'all':'week'}
 function syncURL(){const p=new URLSearchParams();if(pool&&pool!==defaultPool())p.set('pool',pool);if(view!=='jobs')p.set('view',view);for(const id of fields){const v=$(id).value;if(v&&v!==({period:defaultPeriod(),sort:defaultSort()}[id]||''))p.set(id,v)}if(activeJob)p.set('job',activeJob);history.replaceState(null,'',location.pathname+(p.size?'?'+p:''))}
@@ -164,7 +164,7 @@ const institutionEvidence=[
    scope:`机构主承销 ${value.toFixed(2)} 亿元。${sacTechnologyDebt.limitation}`,
    asOf:sacTechnologyDebt.asOf,url:sacTechnologyDebt.url,metric:{...sacTechnologyDebt,value}}))
 ];
-const platformGrades=['证据待核','业务已知','方向强项','细分领先'];
+const platformGrades=['待核验','业务已知','成熟核心','领先核心'];
 const platformBasis={
  rank:'可核对的细分业务排名进入前五',
  'research-coverage':'有规模可核的研究队伍和覆盖，未给具体小组排名',
@@ -234,13 +234,13 @@ function assessPlatform(j,company,duties,now){
  }).map(e=>{
   if(e.metric?.appliesTo===scope.key){
    const share=100*e.metric.value/e.metric.total;
-   return {...e,grade:share>=10?3:share>=5?2:1,basis:'同年同债种主承销份额 '+share.toFixed(2)+'%（领先 ≥10%，强项 ≥5%）'};
+   return {...e,grade:1,basis:'同年同债种份额 '+share.toFixed(2)+'%，只作业务位置参考，不直接决定公司档位或推荐'};
   }
   if(e.metric)return {...e,grade:0,basis:'债种不同或待核，该数据仅作参考'};
   const rating=e.rating;
   if(!rating||rating.scope!==scope.key||!Object.hasOwn(platformBasis,rating.kind))return {...e,grade:1,basis:'已核业务或项目，未证明该岗位所在分线强项'};
-  if(rating.kind==='rank'&&!(Number.isInteger(rating.rank)&&rating.rank>=1&&rating.rank<=5))return {...e,grade:1,basis:'机构业务可核对，未证实进入细分业务前五'};
-  return {...e,grade:rating.kind==='rank'?3:2,basis:platformBasis[rating.kind]};
+  if(['rank','investment-track'].includes(rating.kind))return {...e,grade:1,basis:'排名或市场评价仅为辅助证据；不能单独证明业务含金量'};
+  return {...e,grade:2,basis:platformBasis[rating.kind]+'；具体岗位的决策参与仍需核对'};
  }).sort((a,b)=>b.grade-a.grade||Number(Boolean(b.rating))-Number(Boolean(a.rating))||b.asOf.localeCompare(a.asOf));
  const lead=proofs[0],grade=lead?.grade||0;
  return {scope,grade,label:platformGrades[grade],proofs,note:lead?.basis||'暂无可核对的同业务线成果；不能判断机构好坏'};
@@ -269,6 +269,138 @@ const toEmployer=value=>{
  return employerAliases.find(([,pattern])=>pattern.test(normalized))?.[0]||
   (normalized.endsWith('证券股份有限公司')?normalized.slice(0,-6):value);
 };
+
+// Analyst judgments, not a universal league table. The cited facts and their limits
+// are retained separately; subsidiaries and unnamed employers never inherit grades.
+const companyValueLabels=['认可待核','主体已核','专业平台','主流平台'];
+const companyReviews=[
+ {company:'中金公司',grade:3,markets:['券商投行','卖方研究','买方转岗'],
+  reason:'投行与研究品牌在金融招聘中具有辨识度；有公开职业路径说明相关履历能被买方理解。',
+  url:'https://www.saif.sjtu.edu.cn/show-70-1509.html',asOf:'2021-08-13',kind:'院校人物访谈',
+  limit:'历史个案仅作履历识别证据，不代表转岗概率、现时薪酬、任何团队或中金资本的评级。'},
+ {company:'华泰证券',grade:3,markets:['券商研究','机构业务'],
+  reason:'主流综合券商品牌；研究平台与覆盖可核，适合作为卖方及机构业务履历比较。',
+  url:'https://crm.htsc.com.cn/pdf_finchina/HKSTOCK/2026/2026-3/2026-03-30/2469554.pdf',asOf:'2026-03-31',kind:'公司年报',
+  limit:'主流平台属于分析判断。平台覆盖不能代替行业小组实力、同届正式薪酬或留用证据。'},
+ {company:'腾讯',grade:3,markets:['互联网战略','商业分析','产业研究'],
+  reason:'公司品牌及核心经营业务的辨识度高；更适用于互联网战略和商业分析招聘市场。',
+  url:'https://static.www.tencent.com/uploads/2026/03/18/559e5d480a4411165e6c7367d61fefbd.pdf',asOf:'2026-03-18',kind:'公司年报',
+  limit:'不能据公司品牌把云、游戏、投资或一般支持岗位视为同等质量，也不替代金融投研经历。'},
+ {company:'嘉实基金',grade:3,markets:['公募投研','基金与ETF'],
+  reason:'公募基金品牌和持续运行的产品平台可核；在公募及资管招聘中具有可解释的履历价值。',
+  url:'https://www.jsfund.cn/main/a/20250804/483943.shtml',asOf:'2025-08-04',kind:'机构公开披露',
+  limit:'主流公募判断不由ETF名次直接生成；ETF证据不外推主动权益、信用研究团队或正式岗回报。'},
+ {company:'兴证全球基金',grade:3,markets:['公募投研','多资产与基金配置'],
+  reason:'公募品牌与多资产、养老产品平台有对应证据；配置路线可作为主流公募候选比较。',
+  url:'https://www.xqfunds.com/data/20251027164455jjpz.pdf',asOf:'2025-10-28',kind:'产品定期披露',
+  limit:'公司认可与具体产品表现分开；不据总规模、单期收益或母公司名气推断岗位质量。'},
+ {company:'蓝驰创投',grade:2,markets:['早期科技投资','AI创投'],
+  reason:'早期科技投资的专业平台，有对应基金及真实投资案例；在VC招聘市场内比较。',
+  url:'https://www.lanchivc.com/8906/',asOf:'2026-11-06',kind:'机构投资披露',
+  limit:'专业认可属于分析判断。未验证退出回报、薪酬、资金稳定性及该实习的投委参与。'},
+ {company:'蔚来资本',grade:2,markets:['产业投资','出行与能源投资'],
+  reason:'具名投资机构与产业方向可核，适合在产业资本及相关PE/VC中比较。',
+  url:'https://www.niocapital.com/news/announcements',asOf:'2026-01-02',kind:'机构投资披露',
+  limit:'不继承蔚来汽车的业务评价；投资公告不能证明退出业绩、基金存续或该团队招聘质量。'},
+ {company:'联想创投',grade:2,markets:['CVC','科技产业投资'],
+  reason:'机构明确兼顾财务回报、战略生态与孵化；属于可识别的科技CVC平台。',
+  url:'https://capital.lenovo.com/news/detail/id/797/s/3.html',asOf:'2023-04-06',kind:'机构业务说明',
+  limit:'历史材料用于解释CVC定位，现时岗位需另核。不能与纯财务PE、联想战略部或母公司自动互评。'},
+ {company:'联想',grade:3,markets:['科技战略','商业分析'],
+  reason:'科技公司品牌与实际经营业务可核；在科技战略和商业分析招聘中有明确解释空间。',
+  url:'https://brand.lenovo.com.cn/brand/ppn03771.html',asOf:'2026-11-16',checked:true,kind:'公司业务介绍',
+  limit:'核验日不是文章首发日。集团品牌不证明具体战略团队，更不自动赋予联想创投相同档位。'},
+ {company:'华泰联合证券',grade:2,markets:['股权投行','并购重组','债券融资'],
+  reason:'投行业务的专业主体，有真实重组项目和官方业务入口；与综合券商按投行市场比较。',
+  url:'https://www.sse.com.cn/disclosure/listedinfo/announcement/c/new/2025-08-16/600027_20250816_DNWH.pdf',asOf:'2025-08-16',kind:'交易所项目文件',
+  limit:'不因华泰母公司自动升档；单个项目、承销量或名次不证明整个团队及正式岗薪酬。'},
+ {company:'光源资本',grade:2,markets:['精品投行','FA与并购'],
+  reason:'可核实的财务顾问与交易业务平台；应在相关融资及并购顾问市场比较。',
+  url:'https://lighthousecap.cn/business.html',asOf:'2026-11-13',checked:true,kind:'机构业务介绍',
+  limit:'专业平台判断仍需目标行业的已完成交易与实际职责支撑；不把融资宣传额当收入或回报。'},
+ {company:'中芯聚源投资',grade:2,markets:['半导体产业投资'],
+  reason:'半导体产业投资定位和主体可核，在该产业投资市场具有针对性。',
+  url:'https://cftcapital.com/about.aspx',asOf:'2026-11-13',checked:true,kind:'机构业务介绍',
+  limit:'不外推为所有行业的头部PE；未验证该团队退出、薪酬或实习投资决策参与。'},
+ {company:'景顺投资',grade:2,markets:['外资资管','不动产投资'],
+  reason:'可识别的资产管理平台；现有证据对应亚太及中国投资业务。',
+  url:'https://www.invesco.com/apac/en/institutional/who-we-are/investing-in-china.html',asOf:'2026-11-13',checked:true,kind:'机构业务介绍',
+  limit:'品牌不替代实际雇佣主体、办公室和资产线；未验证具体北京上海团队或总部薪酬。'}
+];
+function assessCompany(company){
+ const review=companyReviews.find(e=>e.company===company);
+ if(review)return {...review,label:companyValueLabels[review.grade],judgment:true};
+ const facts=institutionEvidence.filter(e=>e.company===company&&!e.metric);
+ return {company,grade:facts.length?1:0,label:companyValueLabels[facts.length?1:0],markets:[],
+  reason:facts.length?'已有机构业务出处，但尚无足够证据判断在目标招聘市场的认可度。':'公司主体或招聘市场认可度尚未独立核验。',
+  limit:'待核验不等于差公司；也不能只因岗位方向对口、名字像大机构或标题写了投资，就进入首推。',
+  url:facts[0]?.url,asOf:facts[0]?.asOf,checked:facts[0]?.checked,kind:facts[0]?'业务来源，非认可度证明':'待核',judgment:false};
+}
+function companyEvidence(a){
+ const v=a.companyValue,box=el('div','company-evidence');
+ box.append(el('p','',v.reason),el('p','muted','适用招聘市场：'+(v.markets.join('、')||'待核验')));
+ if(v.url)box.append(link(v.kind+' · '+(v.checked?'核验 ':'')+v.asOf,v.url));
+ box.append(el('p','muted',v.limit));
+ return box;
+}
+const careerResearchRoutes={
+ buy:{title:'买方投研与资配',focus:'公司：识别真实管理人及招聘主体。业务：主动权益、固收、多资产、保险与主权公开市场分别核。岗位：模型、组合建议、归因及对PM的实际支持。',
+  receiving:'公开市场研究招聘重视可迁移的投研经历；GIC上海要求买方或卖方研究经验，也会考虑PE经历，不能只按券商名字筛。',
+  url:'https://careers.gic.com.sg/job/Shanghai-Associate,-China-Equities/1368705866/',source:'GIC上海公开市场招聘 · 2026-11-17核验',limit:'该样本为有经验的正式岗，非当前实习或录用概率证明。'},
+ quant:{title:'量化与交易',focus:'公司：核实管理人、策略类型与真实雇佣主体。业务：量化研究、衍生品、期货研究和执行分开。岗位：策略研究/回测/组合贡献，区别工程、数据和后台。',
+  receiving:'宽德官方岗位将量化研究、工程与其他工作分列。金融方向相近不能抵消C++、数学、建模等硬要求。',
+  url:'https://www.wizardquant.com/career',source:'宽德官方招聘 · 2026-11-17核验',limit:'职位设置不证明同届薪酬、实习留用或所有策略实力。'},
+ investing:{title:'一级与产业投资',focus:'公司：独立PE/VC、CVC、产业基金、家办分开。业务：阶段、行业、基金及退出证据。岗位：投资判断、估值、尽调、投委材料，区别募资和材料整理。',
+  receiving:'联想创投的财务与战略双目标说明CVC不能和纯财务基金直接同榜；平台的产业价值与通用买方跳板需分别判断。',
+  url:'https://capital.lenovo.com/news/detail/id/797/s/3.html',source:'联想创投业务定位 · 2023-04-06',limit:'历史定位材料，不推断当下基金回报、可投性或留用。'},
+ equity:{title:'股权投行与并购',focus:'公司：综合投行与精品FA的客户及交易市场。业务：IPO/ECM、M&A分开，核验已完成项目。岗位：估值建模、交易判断和执行工作分开。',
+  receiving:'GIC直投招聘会明确要求top-tier投行或PE经验，并要求财务模型、尽调和投资备忘录；公司品牌和做过什么要一起核对。',
+  url:'https://careers.gic.com.sg/job/New-York-Associate,-Private-Equity,-Direct-Investments-Group-(Summer-2027-Start)/1362873466/',source:'GIC直投正式岗 · 2026-11-17核验',limit:'纽约有经验岗位仅说明接收方标准，薪酬及要求不能照搬京沪实习。'},
+ debt:{title:'债券承销与结构融资',focus:'公司：核实投行主体和客户市场。业务：DCM、ABS、REITs分别比较。岗位：信用/结构分析与申报、簿记、底稿执行分开。',
+  receiving:'官方业务入口及真实项目用于确定做哪类融资；承销体量可辅助观察业务位置，不能自动生成公司档位或等同买方固收研究。',
+  url:'https://www.htzq.com.cn/what-we-do/institutional-services/ib',source:'华泰联合官方业务 · 2026-11-13核验',limit:'承销量、排名及项目参与均不等于正式岗固定薪酬或留用HC。'},
+ strategy:{title:'战略与咨询',focus:'公司：咨询品牌、实际办公室，或产业公司品牌。业务：战略/商业尽调与执行运营分开。岗位：可解释的商业判断与建议，不能见咨询二字就纳入首推。',
+  receiving:'麦肯锡汽车BA同时体现行业背景和实际职责门槛；主流品牌不能代替岗位适配。公司战略与咨询项目经历也不能直接等同金融投资。',
+  url:'https://www.mckinsey.com/careers/search-jobs/jobs/businessanalyst-automotive-109741',source:'麦肯锡官方岗位 · 2026-11-17核验',limit:'样本包含京沪深及有经验要求，不证明当前实习开放或待遇。'},
+ sell:{title:'券商研究',focus:'公司：卖方招聘与买方接收市场的品牌识别。业务：行业/宏观/策略/海外分开。岗位：独立分析、模型与报告，区别整理、排版或机构销售。',
+  receiving:'公开职业访谈展示过中金研究到买方的路径，但个案不等于概率；是否值得去仍取决于公司回报、实际研究产出与可比较的替代机会。',
+  url:'https://www.saif.sjtu.edu.cn/show-70-1509.html',source:'上海高金职业访谈 · 2021-08-13',limit:'历史个案不代表当前市场、薪酬或留用；团队奖项不参与公司档位判断。'},
+ other:{title:'相邻与其他',focus:'评级、信托标品、银行专业投研、普通银行和销售分别管理。先确定目标路线与雇佣主体，再判断是否能产生可迁移分析成果。',
+  receiving:'复旦职业讲座按职业、行业、平台与工作模式一起分析，不能用一个金融总榜替代职业选择。',
+  url:'https://econ.fudan.edu.cn/info/1672/17026.htm',source:'复旦职业讲座 · 2019-11-19',limit:'仅作方法校准，不作为机构实时排名。银行专业岗保持独立待确认开关。'}
+};
+function renderCompanyCoverage(target,assessment,scoped){
+ const rows=[...assessment.values()], groups=new Map();
+ for(const a of rows){const key=a.company||'机构未知';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(a);}
+ const ordered=[...groups].sort((a,b)=>b[1][0].companyValue.grade-a[1][0].companyValue.grade||b[1].length-a[1].length||a[0].localeCompare(b[0],'zh-CN'));
+ const signature=JSON.stringify(rows.map(a=>[a.j.id,a.company,a.companyValue.grade,a.platform.grade,a.choice.label]));
+ if(target.dataset.signature===signature)return;target.dataset.signature=signature;
+ const unknown=rows.filter(a=>a.companyValue.grade<2).length;
+ const summary=el('summary','',`机构比较依据与覆盖 · ${groups.size} 个机构 · ${unknown} 条岗位认可度待证`);
+ const content=el('div','company-method-content');
+ content.append(el('h3','','先比较公司，再比较业务和职责'),el('p','','档位是有范围的分析判断，不是全金融总榜。主流平台、专业平台、主体已核和认可待核分别展示；未知保留，不能冒充差公司或优质公司。'),
+  el('ol','comparison-order'));
+ const order=content.lastElementChild;
+ for(const text of ['公司含金量：目标招聘方能否识别这段履历；核对法律主体、办公室和接收市场。母子公司不自动继承。','业务含金量：同业务、同资产、同阶段比较实际产品、项目和投资工作。奖项不加分，规模与名次只作旁证。','实际工作：模型、研究判断、交易/投委参与与材料支持分开；品牌不能弥补纯支持职责。','可投与回报：条件冲突先拦；未知保持未知。同届同城同团队正式薪酬、留用原话独立核验，实习日薪不能外推。'])order.append(el('li','',text));
+ const routes=el('div','company-route-grid');
+ for(const r of Object.values(careerResearchRoutes)){
+  const d=el('details','company-route');d.append(el('summary','',r.title),el('p','',r.focus),el('p','',r.receiving),link(r.source,r.url),el('p','muted',r.limit));routes.append(d);
+ }
+ content.append(routes,el('p','research-limit','研究边界：陈思炜历史观点仅作方法参考；小红书受登录/访问限制的内容未当成已核验证据。没有研究完所有市场的声明，也不使用网传薪资填空。'));
+ const grid=el('div','company-coverage-table');
+ table(grid,['机构 / 岗位数','公司判断与适用市场','当前业务与职责','依据及改变判断的条件'],ordered.map(([name,list])=>{
+  const a=list[0],v=a.companyValue,title=el('div'),reason=el('div'),business=el('div'),proof=el('div');
+  title.append(el('strong','',name),el('p','muted',list.length+' 条 · '+[...new Set(list.map(x=>careerDirections[careerDirection(x.j)]))].join('、')));
+  reason.append(el('strong','',v.label),el('p','',v.reason),el('p','muted',v.markets.join('、')||'目标招聘市场待核'));
+  business.append(el('p','', [...new Set(list.map(x=>x.platform.scope.label+'：'+x.platform.label))].join('；')),
+   el('p','muted','实质分析/决策职责 '+list.filter(x=>x.career.decisionWork).length+' 条；公司品牌不替代职责证据。'));
+  if(v.url)proof.append(link(v.kind+' · '+(v.checked?'核验 ':'')+v.asOf,v.url));
+  proof.append(el('p','muted',v.limit),el('p','','改变判断：'+(v.grade<2?'补齐真实主体、目标招聘方认可及同业务项目证据后重评。':'出现同主体、同业务的招聘接收证据、职责或正式岗回报变化时重评。')));
+  return [title,reason,business,proof];
+ }));
+ content.append(grid);target.replaceChildren(summary,content);
+}
+
 const exactHireSignal=/(?:进入|参加|直通|衔接)(?:本公司|本部门|本团队)?(?:正式)?(?:校招|秋招)(?:面试|考核|绿色通道|流程)|(?:发放|给予|获得)(?:全职|正式)(?:录用通知|offer)|(?:通过|经)(?:实习|留用|转正)?(?:考核|答辩)[^，。；]{0,12}(?:可转正|转为正式员工|予以留用|正式录用)/i;
 const positiveHireSignal=/有留用|留用机会|留用答辩|可留用|予以留用|可转正|转正机会|转正留用|(?:可|优先)(?:进入|参加)(?:正式)?(?:校招|秋招)|直通(?:校招|秋招)|(?:校招|秋招)(?:优先|绿色通道)/;
 const noHireSignal=/(?:暂)?不(?:提供|考虑|涉及|设|安排|予以)[^。；]{0,12}(?:留用|转正|正式录用)|无(?:留用|转正|正式录用)|不属于正式校招|不等于正式录用/;
@@ -546,7 +678,8 @@ function financeAssessment(j,data,now){
  const fit=financeFit(j,data.profile,work);
  const direct=fit.filter(x=>x.level==='直接相关'),transferable=fit.filter(x=>x.level==='方法可迁移');
  const company=toEmployer(j.company);
- const platform=assessPlatform(j,company,duties,now),businessProofs=platform.proofs;
+ const companyValue=assessCompany(company);
+  const platform=assessPlatform(j,company,duties,now),businessProofs=platform.proofs;
  const institution=businessProofs[0],businessStrength=platform.grade;
  const opening=pickOpening(j,now),place=pickLocation(j,data.profile,requirements);
  const titleTeam=j.title.match(/研究所\s*[|｜·]?[\s]*([^，,。()（）]{1,16}(?:团队|小组))/)?.[1];
@@ -594,21 +727,22 @@ function financeAssessment(j,data,now){
   !career.depth&&!depth||missing.has('duties')?{label:'资料待补',level:1,note:'JD 中尚无可确认的岗位职责'}:
   sales||!career.decisionWork?{label:'备选',level:2,note:sales?'销售或包含明确销售职责':career.limit}:
   !opening.current?{label:'旧线索',level:2,note:'近期没有核实在招，留在岗位列表'}:
-  businessStrength<2?{label:'业务待核',level:3,note:platform.note}:
+  companyValue.grade<2?{label:'机构待核',level:3,note:companyValue.reason}:
+   businessStrength<2?{label:'业务待核',level:3,note:platform.note}:
   roleGate?{label:'先核条件',level:3,note:roleGate}:
   !opening.open?{label:'先核开放',level:4,tier:'verify',note:'岗位工作有证据，待确认是否仍招'}:
   career.pathway.rank===-1?{label:'先核条件',level:4,tier:'verify',note:'官方 JD 写明无正式岗通道，按实习产出衡量'}:
   specialist||place.remoteOnly&&data.profile.remote==null?{label:'值得冲刺',level:4,tier:'verify',note:gap||'确认可接受的远程安排'}:
   {label:'优先评估',level:5,tier:'recommend',note:'官方在招；有实际分析产出，相关业务线为'+platform.label};
  const due=Number(opening.open&&opening.internship&&opening.deadline>=now&&opening.deadline-now<=3*86400000);
- return {j,company,namedTeam,choice,type,nature,work,secondary,mixed,depth,fit,direct,transferable,platform,institution,businessStrength,businessProofs,teamProof,mentoring,career,
+ return {j,company,companyValue,namedTeam,choice,type,nature,work,secondary,mixed,depth,fit,direct,transferable,platform,institution,businessStrength,businessProofs,teamProof,mentoring,career,
   opening,place,checks,schedule,cohort:unknownCohort?cohort:null,
   skills:unprovenSkill?[...new Set([technical,english].filter(Boolean))]:[],conflicts,due};
 }
 
 function compareCareerValue(a,b){
  // With the role gates applied, prefer a stronger evidenced platform over a marginal difference in JD wording.
- return b.platform.grade-a.platform.grade||b.career.depth-a.career.depth||
+ return b.companyValue.grade-a.companyValue.grade||b.platform.grade-a.platform.grade||b.career.depth-a.career.depth||
   Number(b.career.pathway.rank===2)-Number(a.career.pathway.rank===2)||
   Number(a.career.pathway.rank===-1)-Number(b.career.pathway.rank===-1)||
   Number(b.career.owned)-Number(a.career.owned)||
@@ -675,7 +809,7 @@ function priorityWork(a){
  return evidence?evidence.slice(0,112)+(evidence.length>112?'…':''):a.nature;
 }
 
-const financeChoices=['优先评估','先核开放','值得冲刺','先核条件','业务待核','备选','旧线索','待核专业岗','资料待补','明显不符','已截止','已关闭或过期'];
+const financeChoices=['优先评估','先核开放','值得冲刺','先核条件','机构待核','业务待核','备选','旧线索','待核专业岗','资料待补','明显不符','已截止','已关闭或过期'];
 const decisionFocus=new Set(['ready','information_gaps','new_ready','open','today']);
 const careerDirections={
  buy:'买方投研与资配',quant:'量化与交易',investing:'一级与产业投资',
@@ -715,27 +849,21 @@ function peerMetric(a,b){
 }
 
 function platformComparison(a,b,benchmark){
- if(a.company===b.company&&a.platform.scope.key===b.platform.scope.key)return '同一机构与业务线；平台证据相同，选择看团队与职责。';
- if(benchmark?.matched&&benchmark.metric.value!==benchmark.right.value){
-  const left=benchmark.metric.value>benchmark.right.value;
-  return (left?a.company:b.company)+'在这个同年同债种的主承销口径领先；这项差距不等于薪酬或留用差距。';
- }
- if(a.platform.scope.key!==b.platform.scope.key)return '两岗业务线不同，各自对照同类机构；不把两类业务的名次混成总榜。';
- const [x,y]=[a.platform,b.platform];
- if(x.grade===0||y.grade===0)return '至少一方缺同业务线证据。可先查'+(x.grade===0&&y.grade===0?'两家公司':x.grade===0?a.company:b.company)+'的产品、团队或实际项目。';
- if(x.grade!==y.grade){
-  const [strong,other]=x.grade>y.grade?[a,b]:[b,a];
-  return strong.company+'有更扎实的业务线证据（'+strong.platform.label+'）；'+other.company+'目前为'+other.platform.label+'。'+
-   (x.scope.key==='sell'?'行业小组仍需单独核对。':'没有同口径数据时，不能据此估算实际差距。');
- }
- return '两条业务证据在同一档；当前没有同口径数据把两家拉开。';
+ const [x,y]=[a.companyValue,b.companyValue];
+ if(a.company===b.company)return '同一公司；公司判断相同，继续比较实际业务、团队与职责。';
+ if(a.career.route!==b.career.route)return '接收市场不同：分别看公司在各自招聘市场的认可度，不能混成全金融总榜。';
+ if(x.grade<2||y.grade<2)return '至少一方的公司认可度仍待核验；不能因方向对口或单项承销数字领先就进入首推。';
+ if(x.grade!==y.grade){const stronger=x.grade>y.grade?a:b;return '公司层面先看 '+stronger.company+'（'+stronger.companyValue.label+'）。这是有范围的分析判断；具体业务、职责或正式岗回报证据可以改变选择。';}
+ if(a.platform.scope.key!==b.platform.scope.key)return '公司判断同档，但业务线不同；各自对照目标招聘方，先确定要走的业务。';
+ if(a.platform.grade!==b.platform.grade){const stronger=a.platform.grade>b.platform.grade?a:b;return '公司判断同档，'+stronger.company+'对应业务的证据更充分。仍需看实际职责；证据少不等于公司差。';}
+ return '公司及业务判断暂在同档，优先看职责与真实职业回报。'+(benchmark?.matched?'同口径数字仅作旁证，不直接定胜负。':'当前没有足够证据强行排出名次。');
 }
-
 function platformRow(a){
- const line=el('p','career-platform');
- const chip=el('span','platform-grade',a.platform.label);
- chip.dataset.platformGrade=a.platform.grade;
- line.append(chip,el('span','platform-scope',a.platform.scope.label));
+ const line=el('div','career-platform company-business-role');
+ for(const [label,value,grade]of [['公司',a.companyValue.label,a.companyValue.grade],['业务',a.platform.label,a.platform.grade],['职责',a.career.decisionWork?'有分析产出':a.career.depth?'偏支持 / 待核':'待核验',a.career.decisionWork?2:0]]){
+  const item=el('div','value-pillar');item.append(el('span','value-label',label),el('strong','',value));item.dataset.valueGrade=grade;line.append(item);
+ }
+ line.title=a.companyValue.reason+' '+a.platform.scope.label+'：'+a.platform.note;
  return line;
 }
 
@@ -751,6 +879,7 @@ function peerAdvice(a,b){
   return '岗位方向或产出不同。分别核对业务和职业路径，暂不给机构排一个总名次。';
  }
  const tests=[
+  [a.companyValue.grade,b.companyValue.grade,'公司在对应招聘市场的认可度更明确'],
   [a.platform.grade,b.platform.grade,'该业务线平台证据更强'],
   [a.career.depth,b.career.depth,'JD 有更直接的决策产出'],
   [a.career.pathway.rank===2,b.career.pathway.rank===2,'有明确的正式岗考核或招聘通道'],
@@ -822,7 +951,8 @@ function renderCareerPeer(target,group,focus=false){
     ReadingQueue.sourceRow(a.j.sources||[],PRODUCT));
    const facts=el('dl','career-peer-facts');
    const row=(term,...values)=>{const note=el('dd');note.append(...values);facts.append(el('dt','',term),note)};
-   row('平台判断',platformRow(a),el('p','career-check',a.platform.note));
+   row('公司含金量',companyEvidence(a));
+    row('业务与职责',platformRow(a),el('p','career-check',a.platform.scope.label+' · '+a.platform.note));
    if(a.businessProofs.length){
     const proofs=el('ul','career-peer-sources');
     for(const e of a.businessProofs){
@@ -833,6 +963,7 @@ function renderCareerPeer(target,group,focus=false){
    row('实习职责',priorityWork(a)+(a.career.decisionWork?'':('。'+a.career.limit)));
    row('正式岗回报',a.career.compensation.quote||a.career.compensation.text,'；'+a.career.pathway.text);
    row('优先级',a.choice.label+' · '+priorityNext(a));
+    row('何时改变判断','补到同主体、同业务的招聘接收证据、实质职责、正式岗回报或硬条件变化时重评；未核验项不按满足处理。');
    panel.append(facts);grid.append(panel);
   });
   comparison.replaceChildren(verdict,benchmark,grid);
@@ -874,14 +1005,14 @@ function renderCareerShortlist(target,assessment,scoped){
  });
  const itemsFor=rows=>rows.slice(0,2).map(a=>[
   a.j.id,a.j.title,a.company,a.namedTeam,a.place.where,priorityOpening(a),a.career.evidence,priorityNext(a),a.career.pathway.text,
-  a.institution?.asOf,a.platform.grade,a.platform.scope.key,(a.j.sources||[]).map(source=>ReadingQueue.sourceLabel(source,PRODUCT))]);
+  a.institution?.asOf,a.companyValue.grade,a.platform.grade,a.platform.scope.key,(a.j.sources||[]).map(source=>ReadingQueue.sourceLabel(source,PRODUCT))]);
  const signature=JSON.stringify([selected,groups.map(({key,count,recommended,watch})=>[
   key,count,recommended.length,watch.length,itemsFor(recommended),itemsFor(watch)])]);
  const totals=groups.reduce((out,g)=>({recommended:out.recommended+g.recommended.length,watch:out.watch+g.watch.length}),{recommended:0,watch:0});
  const peer=$('career-peer');
  const active=groups.find(g=>g.key===careerPeerDirection&&g.rows.length>=2);
  const peerSignature=active?JSON.stringify(active.rows.map(a=>[a.j.id,a.j.title,a.company,a.namedTeam,a.place.where,a.choice.label,
-  priorityNext(a),priorityOpening(a),priorityWork(a),a.platform.grade,a.platform.scope.label,a.businessProofs.map(e=>[e.url,e.asOf,e.scope]),a.career.pathway.text,a.career.compensation.quote])):'';
+  priorityNext(a),priorityOpening(a),priorityWork(a),a.companyValue.grade,a.platform.grade,a.platform.scope.label,a.businessProofs.map(e=>[e.url,e.asOf,e.scope]),a.career.pathway.text,a.career.compensation.quote])):'';
  if(peer.dataset.signature!==peerSignature){
   peer.dataset.signature=peerSignature;
   if(active)renderCareerPeer(peer,active);
@@ -963,7 +1094,8 @@ function renderPriorityPanel(assessment,scoped,directional){
    b.onclick=()=>{$('bucket').value=state;render()};
    filters.append(b);
   }
-  const products=el('details','product-suggestions');
+  const coverage=el('details','company-comparison-method');panel.append(coverage);
+   const products=el('details','product-suggestions');
   products.append(el('summary','','产品备选'),el('ul','product-suggestion-list'));
   panel.append(products);
   $('pools').before(panel);
@@ -979,7 +1111,7 @@ function renderPriorityPanel(assessment,scoped,directional){
  if($('period').value!=='all')summary.push($('period').selectedOptions[0].text);
  panel.querySelector('.priority-summary').textContent=summary.join(' · ');
   const payCount=scoped.filter(j=>assessment.get(j.id).career.compensation.quote).length;
- panel.querySelector('.career-pay-note').textContent='按业务线区分细分领先、方向强项、业务已知、证据待核。首推须有业务强项、实质工作和官方在招证据。'+(payCount?
+ panel.querySelector('.career-pay-note').textContent='先比较公司认可度，再看业务和实际职责。认可待核的公司不进首推；奖项、承销量、实习日薪不能代替职业回报。'+(payCount?
   '同团队、同届的正式岗固定薪酬有 '+payCount+' 条可核对，见岗位详情。':'同团队、同届的正式岗薪酬暂未核实。');
  for(const button of panel.querySelectorAll('[data-priority-filter]')){
   const key=button.dataset.priorityFilter,count=key?(counts.get(key)||0):directional.length;
@@ -988,7 +1120,8 @@ function renderPriorityPanel(assessment,scoped,directional){
   button.hidden=Boolean(key&&!count&&!selected);
   button.lastElementChild.textContent=count;
  }
- const products=panel.querySelector('.product-suggestions');
+ renderCompanyCoverage(panel.querySelector('.company-comparison-method'),assessment,scoped);
+  const products=panel.querySelector('.product-suggestions');
  const picks=productSuggestions();
  const key=JSON.stringify(picks.map(pick=>[pick.j.id,pick.j.title,pick.gate,pick.where,pick.origin]));
  if(products.dataset.signature!==key){
@@ -1021,7 +1154,7 @@ function matchesFocus(j,focus,assessment){
 
 function render(){
  if(!DATA)return;
- const assessment=priorityOwner()?financeAssessments():null;
+ const assessment=financeAssessments();
  const q=$('query').value.trim().toLowerCase(),focus=$('focus').value,period=$('period').value;
  ReadingQueue.mountClues($('jobs'),PRODUCT?.reading_queue,'finance',DATA.jobs,PRODUCT);
  ReadingQueue.decisions($('decision-entry'),PRODUCT?.reading_queue,DATA.jobs.filter(j=>!feedback[j.id]?.ignored),PRODUCT?.image_issues,(key,stage)=>{
@@ -1121,13 +1254,14 @@ function renderFinancePriority(a){
     [link('核对官方招聘原文',a.career.compensation.url||a.career.pathway.url)]:[]),
    el('p','muted',(a.career.evidence?'可积累到的方向：':'')+a.career.route),
    ...(a.career.backup?[el('p','muted','按你的职业回报偏好放在备选。')]:[]));
- const business=[platformRow(a),el('p','priority-lead',a.platform.note),el('p','muted',a.teamProof)];
+ add('公司含金量',el('p','priority-lead',a.companyValue.label+' · 分析判断'),companyEvidence(a));
+  const business=[platformRow(a),el('p','priority-lead',a.platform.note),el('p','muted',a.teamProof)];
  if(a.institution)for(const e of a.businessProofs){business.push(link(e.label+' · '+(e.checked?'核验于 ':'')+e.asOf,e.url),el('p','muted',e.scope));}
  else business.push(el('p','muted','该业务线的产品、项目或团队成果暂无可核对出处。'));
  if(a.mentoring)business.push(el('blockquote','quote',a.mentoring));
  add('团队与业务',...business);
  const fits=a.fit.slice(0,2).map(f=>el('p','',f.level+' · '+f.experience+'。'+f.note+'。'));
- add('经历与缺口',...(fits.length?fits:[el('p','muted','已确认经历中暂无直接对应的职责。')]));
+ add('经历与缺口',...(fits.length?fits:[el('p','muted',priorityOwner()?'已确认经历中暂无直接对应的职责。':'共享页面按访客条件未知展示；请自行核对经历与硬条件。')]));
  const opening=priorityOpening(a)+(a.opening.open?' · '+date(a.j.last_verified_at):'');
  const quotes=[a.cohort,...a.skills,...a.conflicts.map(c=>c.quote),...a.schedule.quotes].filter(Boolean);
  add('下一步核对',el('p','priority-lead',priorityNext(a)),el('p','muted',opening),
@@ -1136,7 +1270,7 @@ function renderFinancePriority(a){
  return section;
 }
 
-function showDetail(j,open=true){activeJob=j.id;const d=$('detail-content');d.replaceChildren();const assessment=priorityOwner()?financeAssessments().get(j.id):null;const h=el('div','detail-intro');h.append(el('p','company',companyLabel(j,assessment)),el('h2','',j.title));h.lastChild.id='detail-title';h.append(ReadingQueue.sourceRow(j.sources,PRODUCT),assessment?priorityBadge(assessment):el('span','badge warning',j.bucket));if(!assessment)h.append(el('p','detail-why',j.why),el('p','notice',barrier(j)));d.append(h);if(assessment)d.append(renderFinancePriority(assessment));
+function showDetail(j,open=true){activeJob=j.id;const d=$('detail-content');d.replaceChildren();const assessment=financeAssessments().get(j.id);const h=el('div','detail-intro');h.append(el('p','company',companyLabel(j,assessment)),el('h2','',j.title));h.lastChild.id='detail-title';h.append(ReadingQueue.sourceRow(j.sources,PRODUCT),assessment?priorityBadge(assessment):el('span','badge warning',j.bucket));if(!assessment)h.append(el('p','detail-why',j.why),el('p','notice',barrier(j)));d.append(h);if(assessment)d.append(renderFinancePriority(assessment));
  const apply=el('div','apply-box');apply.append(el('h3','','投递方式'));if(j.application_url)apply.append(link('打开投递入口 ↗',j.application_url));for(const email of j.emails){const row=el('div','email-row');row.append(el('span','',email));const b=el('button','','复制邮箱');b.onclick=async()=>{try{await navigator.clipboard.writeText(email);b.textContent='已复制 ✓';toast('投递邮箱已复制')}catch{toast('复制失败，请选中邮箱复制')}};row.append(b);apply.append(row)}if(!j.application_url&&!j.emails.length)apply.append(el('p','muted','投递方式尚未取得，请查看原文来源。'));if(j.application_note)apply.append(el('p','hint',j.application_note));const acts=el('div','cardactions');acts.append(feedbackButton(j,'saved','收藏'),feedbackButton(j,'applied','标记已投递'),feedbackButton(j,'ignored','忽略'));apply.append(acts);
  const facts=el('div','facts detail-facts');for(const[k,v]of[['地点',assessment?assessment.place.where:j.cities.join(' / ')],['类型',j.internship_type],['出勤',assessment?assessment.schedule.attendance:j.days],['时长',assessment?assessment.schedule.duration:j.months],['补贴',j.pay],['截止',j.deadline],['远程',j.remote_arrangement],['到岗',j.start],['状态',assessment?priorityOpening(assessment):j.opening_status]])fact(facts,k,v);d.append(facts);
  const jd=el('details','jd');jd.open=!assessment;jd.append(el('summary','',isCardExcerpt(j)?'卡片已知信息':'原始 JD'),el('pre','',j.original));d.append(jd,apply);const grid=el('div','detailgrid'),a=el('div'),b=el('div');a.append(el('h3','','① 职业方向'),el('p','',j.matching.direction.reason),el('div','quote',unknown(j.matching.direction.quote)),el('h3','','② 当前竞争力'));for(const x of j.matching.competitiveness.evidence)a.append(el('p','',x.experience+'：'+x.note),el('div','quote',x.quote));if(!j.matching.competitiveness.evidence.length)a.append(el('p','','尚无明确经历证据。'));a.append(el('h3','','主要缺口'));for(const x of j.matching.competitiveness.gaps)a.append(el('p','',x.mandatory?'要求需补证':'偏好 / 加分，非硬门槛'),el('div','quote',x.quote));if(!j.matching.competitiveness.gaps.length)a.append(el('p','','JD 未提供可进一步核对的技能要求。'));table(b,['条件','状态','JD 原句 / 解释'],j.matching.eligibility.conditions.map(x=>[x.name,x.state,(x.quote||'JD 未写明')+'；'+x.reason]));b.prepend(el('h3','','③ 可投条件'));b.append(el('h3','','④ 机会质量'),el('p','',j.matching.quality.note),el('p','','职责性质：'+j.work_nature),el('div','quote','留用原话：'+unknown(j.conversion_quote)));grid.append(a,b);
@@ -1158,7 +1292,7 @@ function setupData(initial=false){
  pool??=defaultPool();
  const desired=Object.fromEntries(fields.map(id=>[id,$(id).value]));
  if(first){desired.period=defaultPeriod();desired.sort=defaultSort()}
- const priorPriority=$('sort').querySelector('[value="priority"]'),owner=priorityOwner();
+ const priorPriority=$('sort').querySelector('[value="priority"]'),owner=true;
  if(owner&&!priorPriority){option('sort','priority','评估优先级');$('sort').prepend($('sort').lastElementChild);desired.sort='priority'}
  else if(!owner&&priorPriority){priorPriority.remove();if(desired.sort==='priority')desired.sort='direction'}
  if(owner!==Boolean(priorPriority)){
