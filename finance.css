@@ -57,6 +57,10 @@
 .career-role-method{margin-top:.4rem;overflow-wrap:anywhere}
 .career-role-method summary{cursor:pointer}
 .career-role-method p{margin:.35rem 0}
+.career-direction-method{margin:8px 10px 4px;color:var(--muted);font-size:12px;line-height:1.5}
+.career-track-method p,.career-track-method ul{margin:6px 0;font-size:12px;line-height:1.5}
+.career-track-method ul{padding-inline-start:18px}
+.career-reference{margin-top:4px}
 @media(min-width:1100px){.career-shortlist{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:700px){.career-shortlist,.career-peer-grid{grid-template-columns:minmax(0,1fr)}.career-job,.career-compare-toggle{min-height:40px}}
 .priority-filters{display:flex;flex-wrap:wrap;gap:6px}
