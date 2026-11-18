@@ -8,8 +8,13 @@ const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className
 const unknown=x=>x||'未知', date=x=>x?x.slice(0,16).replace('T',' '):'未知';
 try{feedback=JSON.parse(localStorage.getItem('finance-feedback-v1')||'{}')}catch{}
 const fields=['query','city','type','direction','family','eligibility','bucket','period','focus','sort'];
-const restoreParams=new URLSearchParams(location.search),desktopMedia=matchMedia('(min-width:801px)');
-$('filter-panel').open=desktopMedia.matches;desktopMedia.addEventListener('change',e=>{$('filter-panel').open=e.matches});
+const financePage=typeof document!=='undefined';
+const restoreParams=new URLSearchParams(financePage?location.search:'');
+if(financePage){
+ const desktopMedia=matchMedia('(min-width:801px)');
+ $('filter-panel').open=desktopMedia.matches;
+ desktopMedia.addEventListener('change',e=>{$('filter-panel').open=e.matches});
+}
 function link(label,url){const a=el('a','',label);if(url&&(/^https?:\/\//.test(url)||(url.startsWith('/')||url.startsWith('./')))){a.href=url;if(!(url.startsWith('/')||url.startsWith('./'))){a.target='_blank';a.rel='noopener noreferrer'}}return a}
 function table(target,headers,rows){const wrap=el('div','tablewrap');wrap.tabIndex=0;wrap.setAttribute('role','region');wrap.setAttribute('aria-label',headers.join(' / '));const t=el('table'),head=el('tr'),body=el('tbody');headers.forEach(x=>head.append(el('th','',x)));const thead=el('thead');thead.append(head);t.append(thead,body);rows.forEach(r=>{const tr=el('tr');r.forEach(v=>{const td=el('td');if(v instanceof Node)td.append(v);else td.textContent=unknown(v);tr.append(td)});body.append(tr)});wrap.append(t);target.replaceChildren(wrap)}
 function toast(text,undo){clearTimeout(toastTimer);($('job-detail').open?$('job-detail'):document.body).append($('toast'));$('toast').replaceChildren(el('span','',text));if(undo){const b=el('button','','撤销');b.onclick=()=>{undo();$('toast').hidden=true};$('toast').append(b)}$('toast').hidden=false;toastTimer=setTimeout(()=>$('toast').hidden=true,6000)}
@@ -358,7 +363,7 @@ function renderInstitutionResults(){
 function renderInstitutionResearch(assessment){
  if(!assessment||!$('research'))return;researchAssessment=assessment;
  const names=[...new Set([...assessment.values()].map(a=>a.company||'机构未知'))].sort((a,b)=>a.localeCompare(b,'zh-CN'));
- const sig=INSTITUTION_RESEARCH.revision+JSON.stringify([...assessment.values()].map(a=>[a.j.id,a.company,a.companyValue.grade]));
+ const sig=INSTITUTION_RESEARCH.revision+JSON.stringify([...assessment.values()].map(a=>[a.j.id,a.company,a.companyValue.grade,a.platform.grade,a.choice.label]));
  if(researchSignature===sig)return;researchSignature=sig;
  const target=$('research');target.replaceChildren();
  const heading=el('div','page-heading');heading.append(el('div'));
@@ -376,7 +381,21 @@ function renderInstitutionResearch(assessment){
    el('p','muted','每 30 分钟检查已登记证据；每日继续研究新机构、未核主体和变化内容。证据变化先暂停首推，实际复核后再重排；支持、销售和主体不清的岗位不进入优先名单。'),
    el('p','muted',patrol.checked_at?'最近自动检查 '+new Date(patrol.checked_at).toLocaleString('zh-CN',{hour12:false}):'尚无本轮自动检查记录'));
   target.append(workflow);
- const compare=el('section','institution-compare-section');compare.setAttribute('aria-labelledby','institution-compare-title');
+  const method=INSTITUTION_RESEARCH.comparison_method;
+  if(method){
+   const details=el('details','institution-perspective');details.dataset.comparisonMethod=method.version;
+   const labels={article:'文章正文',recruiting:'招聘原文',transcript_excerpt:'逐字稿摘读',metadata:'内容待核',restricted:'正文未取得'};
+   details.append(el('summary','','方法怎么影响排序 · 查看原始材料'));
+   for(const rule of method.rules){
+    const row=el('p','');row.append(el('strong','',rule.title),'。'+rule.application);details.append(row);
+   }
+   const sources=el('ul','');
+   for(const source of method.sources){
+    const row=el('li','');row.append(link(source.title,source.url),' · '+labels[source.reading]+'。'+source.finding+' '+source.limit);sources.append(row);
+   }
+   details.append(sources);target.append(details);
+  }
+  const compare=el('section','institution-compare-section');compare.setAttribute('aria-labelledby','institution-compare-title');
  const title=el('h3','','直接比较两家');title.id='institution-compare-title';compare.append(title);
  const controls=el('div','institution-compare-controls');
  for(const [id,label]of [['institution-left','第一家机构'],['institution-right','第二家机构']]){
@@ -581,7 +600,7 @@ function careerAssignments(lines,pattern){
    const head=quote.replace(assignmentLead,'').trim();
    if(!pattern.test(quote)||financeSupport.test(quote)||passiveAssignment.test(head)||
       (!researchAction.test(head)&&!researchTask.test(head)))continue;
-   const use=line.match(taskRecipient)?.[0]||null;
+   const use=quote.match(taskRecipient)?.[0]||null;
    evidence.push({quote,use,owned:!workAssistance.test(quote.replace(/^(?:在[^，。；]{1,25}(?:带领|指导)下)[，,]?\s*/,''))&&workOwnership.test(quote)});
   }
  }
@@ -871,8 +890,19 @@ function compareCareerValue(a,b){
   Number(b.career.pathway.rank===2)-Number(a.career.pathway.rank===2)||
   Number(a.career.pathway.rank===-1)-Number(b.career.pathway.rank===-1)||
   Number(b.career.owned)-Number(a.career.owned)||
+   Number(Boolean(b.career.decisionUse))-Number(Boolean(a.career.decisionUse))||
   Number(Boolean(b.direct.length))-Number(Boolean(a.direct.length))||
   Number(Boolean(b.transferable.length))-Number(Boolean(a.transferable.length));
+}
+
+function financeRecommendationAudit(data,now){
+ const rows=data.jobs.map(job=>financeAssessment(job,data,now)).sort(compareFinance);
+ return rows.map(a=>({
+  id:a.j.id,company:a.company||null,direction:careerDirection(a.j),scope:a.platform.scope.key,
+  company_grade:a.companyValue.grade,business_grade:a.platform.grade,choice:a.choice.label,
+  next:priorityNext(a),open:a.opening.open===true,decision_work:a.career.decisionWork,
+  owned_output:a.career.owned,decision_recipient:a.career.decisionUse
+ }));
 }
 
 function compareFinance(a,b){
@@ -1130,9 +1160,10 @@ function renderCareerShortlist(target,assessment,scoped){
  });
  const itemsFor=rows=>rows.slice(0,2).map(a=>[
   a.j.id,a.j.title,a.company,a.namedTeam,a.place.where,priorityOpening(a),a.career.evidence,priorityNext(a),a.career.pathway.text,
-  a.institution?.asOf,a.companyValue.grade,a.platform.grade,a.platform.scope.key,(a.j.sources||[]).map(source=>ReadingQueue.sourceLabel(source,PRODUCT))]);
- const signature=JSON.stringify([selected,groups.map(({key,count,recommended,watch})=>[
-  key,count,recommended.length,watch.length,itemsFor(recommended),itemsFor(watch)])]);
+   a.institution?.asOf,a.companyValue.grade,a.platform.grade,a.platform.scope.key,(a.j.sources||[]).map(source=>ReadingQueue.sourceLabel(source,PRODUCT))]);
+  const signature=JSON.stringify([selected,groups.map(({key,count,recommended,watch,rows})=>[
+   key,count,recommended.length,watch.length,itemsFor(recommended),itemsFor(watch),
+   rows.map(a=>[a.j.id,a.choice.label,a.companyValue.grade,a.platform.grade,a.career.decisionWork])])]);
  const totals=groups.reduce((out,g)=>({recommended:out.recommended+g.recommended.length,watch:out.watch+g.watch.length}),{recommended:0,watch:0});
  const peer=$('career-peer');
  const active=groups.find(g=>g.key===careerPeerDirection&&g.rows.length>=2);
@@ -1166,7 +1197,7 @@ function renderCareerShortlist(target,assessment,scoped){
   return entry;
  };
  target.replaceChildren(...groups.map(group=>{
-  const {key,count,recommended,watch}=group;
+   const {key,count,recommended,watch,rows}=group;
   const section=el('section','career-list');
   section.dataset.careerDirection=key;
   const heading=el('div','career-heading'),filter=el('button','career-filter',selected===key?'清除方向':'看 '+count+' 条');
@@ -1182,7 +1213,14 @@ function renderCareerShortlist(target,assessment,scoped){
   heading.append(el('h3','',careerDirections[key]),filter);
   section.append(heading);
   if(recommended.length) section.append(entryFor(recommended[0]));
-  else section.append(el('p','career-empty','暂无首推'));
+   else{
+    const pending=rows.filter(a=>a.choice.level>=2&&a.choice.label!=='旧线索');
+    const company=pending.filter(a=>a.companyValue.grade<2).length;
+    const business=pending.filter(a=>a.companyValue.grade>=2&&a.platform.grade<2).length;
+    const duties=pending.filter(a=>a.companyValue.grade>=2&&a.platform.grade>=2&&!a.career.decisionWork).length;
+    const reasons=[company&&'公司依据待补 '+company,business&&'对应业务待补 '+business,duties&&'实际分工待核 '+duties].filter(Boolean);
+    section.append(el('p','career-empty',reasons.length?'暂无首推 · '+reasons.join(' · '):'暂无符合首推条件的在招岗位'));
+   }
   if(recommended.length>1){
    const more=el('details','career-more');
    more.append(el('summary','','同方向另一条首推 · 共 '+recommended.length+' 条'),entryFor(recommended[1]));
@@ -1506,9 +1544,11 @@ async function load(initial=false){
 }
 function renderRuntime(s){if(s.snapshot_at){RadarPublication.update(s);return;}const running=s.status==='running';$('refresh').disabled=running||updating;$('refresh').textContent=running||updating?'正在更新…':'更新岗位';$('status').textContent=running?'正在后台读取，完成后自动更新页面':s.status==='failed'?'上次更新失败 · 已保留成功结果':'每 5 分钟检查新消息 · 未读内容独立补齐';if(s.status==='failed')toast('后台更新失败，可重试；已保留成功结果')}
 async function refreshNow(){if(updating)return;updating=true;$('refresh').disabled=true;$('refresh').textContent='正在更新…';const old=DATA?.generated_at;try{const r=await fetch('/api/refresh',{method:'POST',headers:{'X-Workbench':'local'}});if(!r.ok)throw Error('更新未启动（'+r.status+'），请重试。');toast('后台更新已开始，完成后自动显示结果');let seen=false,done=false;for(let n=0;n<90;n++){await new Promise(r=>setTimeout(r,2000));const r=await fetch('./data/status.json');if(!r.ok)throw Error('更新状态暂时无法读取，请稍后重试');const s=await r.json();renderRuntime(s);if(s.status==='running'){seen=true;continue}if(s.status==='failed')throw Error('本次更新失败，已保留上次结果');if(s.status==='ok'&&(seen||n>=1)){await load();toast(DATA.generated_at===old?'更新完成，当前没有新增岗位':'岗位已更新，筛选已保留');done=true;break}}if(!done)toast('后台仍在处理，下次进入会读取最新结果')}catch(e){toast(e.message);$('status').textContent=e.message}finally{updating=false;$('refresh').disabled=false;$('refresh').textContent='更新岗位'}}
+if(financePage){
 document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));for(const id of fields)$(id).addEventListener(id==='query'?'input':'change',()=>DATA&&render());$('quick-query').addEventListener('input',()=>{$('query').value=$('quick-query').value;render()});$('clear').onclick=resetFilters;$('refresh').onclick=refreshNow;$('filters-toggle').onclick=()=>{$('filter-panel').open=!$('filter-panel').open;if($('filter-panel').open){$('filter-panel').scrollIntoView({block:'nearest'});$('query').focus()}};$('filter-panel').addEventListener('toggle',()=>$('filters-toggle').setAttribute('aria-expanded',$('filter-panel').open));$('close-detail').onclick=()=>$('job-detail').close();$('job-detail').addEventListener('close',()=>{activeJob=null;syncURL()});
 for(const id of fields){$(id).name=id;$(id).autocomplete='off'}
 load(true).then(async()=>{try{const r=await fetch('./data/status.json');if(r.ok)renderRuntime(await r.json());if(location.hostname==='127.0.0.1'||location.hostname==='localhost'){const m=await(await fetch('./data/mobile.json')).json();if(m.available){$('mobile').href=m.url;$('mobile').hidden=false}}}catch{}});
+}
 
 function renderInformation(){
  const queue=PRODUCT?.reading_queue,backlog=ReadingQueue.weekQueue(queue);ReadingQueue.mount($('reading-panel'),queue,PRODUCT?.image_issues||[]);$('unread-count').textContent=backlog?.total??'';
@@ -1523,4 +1563,5 @@ function renderInformation(){
  const wc=$('wechat-coverage');if(PRODUCT){wc.append(el('p','',`微信读取沿用已授权招聘来源，详细范围和待补队列见产品看板。`),link('查看微信来源与未读清单','./product.html?tab=pending'));const summary=DATA.wechat_coverage;if(summary){const counts=el('div');wc.append(counts);table(counts,['项目','当前数量'],Object.entries(summary).map(([k,v])=>[k,String(v)]))}}else wc.append(el('p','notice','微信覆盖接口读取失败，不能认定没有缺口。'));
 }
 
-let checkingBackground=false;setInterval(async()=>{if(document.hidden||updating||checkingBackground)return;checkingBackground=true;try{const r=await fetch('./data/status.json',{cache:'no-store'});if(r.ok){const status=await r.json();renderRuntime(status);const published=status.published_at||status.finished_at;if(published&&(!DATA||Date.parse(published)>Date.parse(DATA.generated_at)))await load();}}catch{}finally{checkingBackground=false}},60000);
+let checkingBackground=false;if(financePage)setInterval(async()=>{if(document.hidden||updating||checkingBackground)return;checkingBackground=true;try{const r=await fetch('./data/status.json',{cache:'no-store'});if(r.ok){const status=await r.json();renderRuntime(status);const published=status.published_at||status.finished_at;if(published&&(!DATA||Date.parse(published)>Date.parse(DATA.generated_at)))await load();}}catch{}finally{checkingBackground=false}},60000);
+if(typeof module!=='undefined'&&module.exports) module.exports={financeRecommendationAudit};
