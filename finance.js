@@ -250,7 +250,7 @@ function assessPlatform(j,company,duties,now){
  const grade=qualified?2:(proof||context.length?1:0);
  const proofs=[...(proof?proof.source_ids.map(id=>{
   const s=researchSources.get(id);
-  return {company,grade,title:s.title,label:s.title,url:s.url,asOf:proof.checked_at,checked:true,kind:'同主体业务核验',basis:note};
+  return {company,grade,title:s.title,label:s.title,url:s.url,asOf:proof.checked_at,checked:true,kind:'同主体业务核验',scope:s.scope,basis:note};
  }):[]),...context];
  return {scope,grade,label:platformGrades[grade],proofs,note};
 }
