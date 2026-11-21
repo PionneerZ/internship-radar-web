@@ -1681,7 +1681,10 @@ function setupData(initial=false){
  if(initial)setView(restoreParams.get('view')||'jobs');
  render();
  if(initial){
-  const j=DATA.jobs.find(x=>x.id===restoreParams.get('job'));
+   const requestedJob=restoreParams.get('job');
+   const aliases=DATA.job_aliases||{};
+   const linkedJob=Object.hasOwn(aliases,requestedJob)?aliases[requestedJob]:requestedJob;
+   const j=DATA.jobs.find(x=>x.id===linkedJob);
   if(j)showDetail(j);
  }
 }
